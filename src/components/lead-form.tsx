@@ -2,11 +2,9 @@
 
 import { useActionState } from "react";
 import { submitLead, type LeadFormState } from "@/app/actions";
+import { Field, inputClass } from "@/components/ui/form";
 
 const initialState: LeadFormState = { status: "idle", message: "" };
-
-const inputClass =
-  "w-full rounded-lg border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900";
 
 export function LeadForm() {
   const [state, formAction, pending] = useActionState(submitLead, initialState);
@@ -111,27 +109,5 @@ export function LeadForm() {
         </button>
       </div>
     </form>
-  );
-}
-
-function Field({
-  label,
-  name,
-  error,
-  children,
-}: {
-  label: string;
-  name: string;
-  error?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={name} className="text-sm font-medium text-zinc-700">
-        {label}
-      </label>
-      {children}
-      {error && <p className="text-xs text-red-600">{error}</p>}
-    </div>
   );
 }

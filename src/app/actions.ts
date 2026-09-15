@@ -1,6 +1,7 @@
 "use server";
 
 import { Resend } from "resend";
+import { EMAIL_PATTERN, readField } from "@/lib/validation";
 
 export type LeadFormState = {
   status: "idle" | "success" | "error";
@@ -8,13 +9,6 @@ export type LeadFormState = {
   errors?: Partial<Record<"name" | "email" | "business", string>>;
   fields?: Record<string, string>;
 };
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function readField(formData: FormData, key: string, maxLength: number) {
-  const value = formData.get(key);
-  return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
-}
 
 export async function submitLead(
   _prevState: LeadFormState,

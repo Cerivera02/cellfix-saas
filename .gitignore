@@ -30,8 +30,15 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files: los secretos van en .env.local / .env.*.local (nunca se suben).
+# Se suben solo la plantilla y los valores por defecto sin secretos.
 .env*
+!.env.example
+!.env.development
+!.env.production
+
+# archivos subidos (fotos de evidencia)
+/storage
 
 # vercel
 .vercel

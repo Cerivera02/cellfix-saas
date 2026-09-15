@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { FaqAccordion } from "@/components/faq-accordion";
 import { LeadForm } from "@/components/lead-form";
 
@@ -72,12 +73,17 @@ export default function Home() {
             <a href="#como-funciona" className="hover:text-zinc-900">Cómo funciona</a>
             <a href="#preguntas" className="hover:text-zinc-900">Preguntas</a>
           </nav>
-          <a
-            href="#contacto"
-            className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700"
-          >
-            Solicitar acceso
-          </a>
+          <div className="flex items-center gap-4">
+            <Link href="/login" className="text-sm font-medium text-zinc-600 hover:text-zinc-900">
+              Iniciar sesión
+            </Link>
+            <a
+              href="#contacto"
+              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700"
+            >
+              Solicitar acceso
+            </a>
+          </div>
         </div>
       </header>
 
