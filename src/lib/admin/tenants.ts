@@ -1,15 +1,13 @@
 import "server-only";
-import { randomBytes } from "node:crypto";
 import { cache } from "react";
-import type { PoolClient } from "pg";
-import { db, isUniqueViolation, withTransaction } from "@/lib/db";
-import { hashPassword } from "@/lib/auth/password";
+import { db, withTransaction } from "@/lib/db";
+import { computeAccess, isSubscriptionStatus, type SubscriptionStatus, type TenantAccess } from "@/lib/billing/access";
 import { normalizeModules, type ModuleKey } from "@/lib/modules";
 import { requirePlatformAdmin } from "@/lib/auth/session";
-import { EmailTakenError, getTeam, type Team } from "@/lib/team/core";
-import { tenantSchemaName } from "@/lib/tenancy/db";
+import { getTeam, type Team } from "@/lib/team/core";
+import { isStripeSubscriptionLive } from "@/lib/billing/subscription";
+import { createTenantWithOwner } from "@/lib/tenancy/create";
 import { UUID_PATTERN } from "@/lib/validation";
-import { MIGRATION_LOCK_KEY, provisionTenantSchema } from "../../../db/migrator.mjs";
 
 // Capa de datos del panel administrativo: cada función verifica que quien la
 // llama sea administrador de la plataforma.
@@ -25,7 +23,42 @@ export type TenantSummary = {
   userCount: number;
   ownerName: string | null;
   ownerEmail: string | null;
+  subscriptionStatus: SubscriptionStatus;
+  access: TenantAccess;
 };
+
+export type TenantSubscription = {
+  status: SubscriptionStatus;
+  trialEndsAt: Date | null;
+  currentPeriodEnd: Date | null;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
+  access: TenantAccess;
+};
+
+type SubscriptionColumns = {
+  subscription_status: string;
+  trial_ends_at: Date | null;
+  current_period_end: Date | null;
+  past_due_since: Date | null;
+  grace_days: number | null;
+};
+
+function toAccess(row: SubscriptionColumns) {
+  const status = isSubscriptionStatus(row.subscription_status) ? row.subscription_status : "active";
+  return {
+    status,
+    access: computeAccess(
+      {
+        status,
+        trialEndsAt: row.trial_ends_at,
+        currentPeriodEnd: row.current_period_end,
+        pastDueSince: row.past_due_since,
+      },
+      row.grace_days ?? 7,
+    ),
+  };
+}
 
 export type TenantDetail = {
   id: string;
@@ -35,35 +68,9 @@ export type TenantDetail = {
   createdAt: Date;
   // Módulos opcionales activos; la base (reparaciones, clientes y equipo) siempre está activa.
   modules: ModuleKey[];
+  subscription: TenantSubscription;
   team: Team;
 };
-
-function slugify(value: string) {
-  const slug = value
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
-  return slug || "taller";
-}
-
-async function insertTenant(client: PoolClient, name: string) {
-  const baseSlug = slugify(name);
-
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const slug = attempt === 0 ? baseSlug : `${baseSlug}-${randomBytes(3).toString("hex")}`;
-    // ON CONFLICT evita abortar la transacción si el slug ya existe.
-    const { rows } = await client.query<{ id: string }>(
-      "INSERT INTO tenants (name, slug) VALUES ($1, $2) ON CONFLICT (slug) DO NOTHING RETURNING id",
-      [name, slug],
-    );
-    if (rows[0]) return rows[0].id;
-  }
-
-  throw new Error("No se pudo generar un identificador único para el taller.");
-}
 
 export async function listTenants(): Promise<TenantSummary[]> {
   await requirePlatformAdmin();
@@ -77,8 +84,9 @@ export async function listTenants(): Promise<TenantSummary[]> {
     user_count: number;
     owner_name: string | null;
     owner_email: string | null;
-  }>(
+  } & SubscriptionColumns>(
     `SELECT t.id, t.name, t.slug, t.status, t.created_at,
+            t.subscription_status, t.trial_ends_at, t.current_period_end, t.past_due_since, ps.grace_days,
             (SELECT count(*)::int FROM memberships m WHERE m.tenant_id = t.id) AS user_count,
             o.name AS owner_name, o.email AS owner_email
        FROM tenants t
@@ -90,10 +98,13 @@ export async function listTenants(): Promise<TenantSummary[]> {
           ORDER BY mr.created_at
           LIMIT 1
        ) o ON true
+       LEFT JOIN platform_settings ps ON ps.id
       ORDER BY t.created_at DESC`,
   );
 
-  return rows.map((row) => ({
+  return rows.map((row) => {
+    const { status, access } = toAccess(row);
+    return {
     id: row.id,
     name: row.name,
     slug: row.slug,
@@ -102,7 +113,10 @@ export async function listTenants(): Promise<TenantSummary[]> {
     userCount: row.user_count,
     ownerName: row.owner_name,
     ownerEmail: row.owner_email,
-  }));
+    subscriptionStatus: status,
+    access,
+    };
+  });
 }
 
 export const getTenant = cache(async (tenantId: string): Promise<TenantDetail | null> => {
@@ -116,7 +130,17 @@ export const getTenant = cache(async (tenantId: string): Promise<TenantDetail | 
     status: TenantStatus;
     created_at: Date;
     modules: string[];
-  }>("SELECT id, name, slug, status, created_at, modules FROM tenants WHERE id = $1", [tenantId]);
+    stripe_customer_id: string | null;
+    stripe_subscription_id: string | null;
+  } & SubscriptionColumns>(
+    `SELECT t.id, t.name, t.slug, t.status, t.created_at, t.modules,
+            t.subscription_status, t.trial_ends_at, t.current_period_end, t.past_due_since, ps.grace_days,
+            t.stripe_customer_id, t.stripe_subscription_id
+       FROM tenants t
+       LEFT JOIN platform_settings ps ON ps.id
+      WHERE t.id = $1`,
+    [tenantId],
+  );
   const tenant = rows[0];
   if (!tenant) return null;
 
@@ -127,40 +151,23 @@ export const getTenant = cache(async (tenantId: string): Promise<TenantDetail | 
     status: tenant.status,
     createdAt: tenant.created_at,
     modules: normalizeModules(tenant.modules),
+    subscription: {
+      ...toAccess(tenant),
+      trialEndsAt: tenant.trial_ends_at,
+      currentPeriodEnd: tenant.current_period_end,
+      stripeCustomerId: tenant.stripe_customer_id,
+      stripeSubscriptionId: tenant.stripe_subscription_id,
+    },
     team: await getTeam(tenant.id),
   };
 });
 
 // Crea el taller y su propietario en una sola transacción. Devuelve el id del taller.
+// Los talleres que da de alta el administrador quedan activos, sin prueba.
 export async function createTenant(name: string, owner: { name: string; email: string; password: string }) {
   await requirePlatformAdmin();
-  const passwordHash = await hashPassword(owner.password);
-
-  try {
-    return await withTransaction(async (client) => {
-      const tenantId = await insertTenant(client, name);
-      const { rows } = await client.query<{ id: string }>(
-        "INSERT INTO users (name, email, password_hash) VALUES ($1, $2, $3) RETURNING id",
-        [owner.name, owner.email, passwordHash],
-      );
-      const userId = rows[0].id;
-      await client.query("INSERT INTO memberships (tenant_id, user_id) VALUES ($1, $2)", [tenantId, userId]);
-      await client.query("INSERT INTO member_roles (tenant_id, user_id, system_role) VALUES ($1, $2, 'owner')", [
-        tenantId,
-        userId,
-      ]);
-
-      // Crea el schema del taller y le aplica sus migraciones en la misma transacción:
-      // si algo falla no queda un taller a medias. El lock espera a un db:migrate en curso.
-      await client.query("SELECT pg_advisory_xact_lock($1::bigint)", [MIGRATION_LOCK_KEY]);
-      await provisionTenantSchema(client, tenantSchemaName(tenantId), { inTransaction: true });
-
-      return tenantId;
-    });
-  } catch (error) {
-    if (isUniqueViolation(error, "users_email_key")) throw new EmailTakenError();
-    throw error;
-  }
+  const { tenantId } = await createTenantWithOwner({ name, owner, plan: "active" });
+  return tenantId;
 }
 
 export async function updateTenantName(tenantId: string, name: string) {
@@ -186,4 +193,55 @@ export async function setTenantStatus(tenantId: string, status: TenantStatus) {
       await client.query("DELETE FROM sessions WHERE tenant_id = $1", [tenantId]);
     }
   });
+}
+
+// ¿El taller tiene una suscripción de Stripe que sigue cobrándose? Se pregunta a Stripe;
+// si no está configurado, se confía en el estado guardado.
+async function hasLiveStripeSubscription(tenantId: string) {
+  const { rows } = await db.query<{ subscription_status: string; stripe_subscription_id: string | null }>(
+    "SELECT subscription_status, stripe_subscription_id FROM tenants WHERE id = $1",
+    [tenantId],
+  );
+  const row = rows[0];
+  if (!row?.stripe_subscription_id) return false;
+  const live = await isStripeSubscriptionLive(row.stripe_subscription_id);
+  return live ?? (row.subscription_status === "active" || row.subscription_status === "past_due");
+}
+
+// Alarga la prueba N días desde su fin (o desde hoy si ya terminó). Sirve también para
+// darle más tiempo a un taller bloqueado. No aplica si ya paga con Stripe.
+// Una suscripción de Stripe que ya no cobra se desliga (se conserva el cliente) para que sus
+// eventos tardíos no cambien el estado.
+export async function extendTenantTrial(tenantId: string, days: number) {
+  await requirePlatformAdmin();
+  if (!UUID_PATTERN.test(tenantId)) return false;
+  if (await hasLiveStripeSubscription(tenantId)) return false;
+  const { rowCount } = await db.query(
+    `UPDATE tenants
+        SET subscription_status = 'trialing',
+            trial_ends_at = GREATEST(COALESCE(trial_ends_at, now()), now()) + make_interval(days => $2::int),
+            stripe_subscription_id = NULL,
+            current_period_end = NULL,
+            past_due_since = NULL
+      WHERE id = $1`,
+    [tenantId, days],
+  );
+  return (rowCount ?? 0) > 0;
+}
+
+// Activa el taller sin Stripe (pago por fuera): acceso sin fecha de fin. Si su suscripción de
+// Stripe ya no cobra, se desliga igual que al extender la prueba.
+export async function markTenantActive(tenantId: string) {
+  await requirePlatformAdmin();
+  if (!UUID_PATTERN.test(tenantId)) return;
+  const keepSubscription = await hasLiveStripeSubscription(tenantId);
+  await db.query(
+    `UPDATE tenants
+        SET subscription_status = 'active',
+            current_period_end = NULL,
+            past_due_since = NULL,
+            stripe_subscription_id = CASE WHEN $2::boolean THEN stripe_subscription_id END
+      WHERE id = $1`,
+    [tenantId, keepSubscription],
+  );
 }

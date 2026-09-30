@@ -1,3 +1,4 @@
+import { getTenantAccess } from "@/lib/billing/tenant-access";
 import { hasModule } from "@/lib/modules";
 import { MAX_PHOTO_BYTES, PhotoError, savePhoto } from "@/lib/photos/core";
 import { getActiveTenantModules } from "@/lib/tenancy/modules";
@@ -10,6 +11,12 @@ export async function POST(request: Request, ctx: RouteContext<"/api/evidencia/[
   const modules = await getActiveTenantModules(tenant);
   if (!modules || !hasModule(modules, "photos")) {
     return Response.json({ message: "El enlace no es válido." }, { status: 404 });
+  }
+
+  // Taller bloqueado por falta de pago: no recibe fotos nuevas.
+  const access = await getTenantAccess(tenant);
+  if (!access || access.state === "locked") {
+    return Response.json({ message: "El taller tiene el acceso pausado. Avísale al personal." }, { status: 403 });
   }
 
   // Rechaza de entrada cuerpos demasiado grandes (margen para los encabezados del multipart).

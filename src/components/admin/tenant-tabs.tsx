@@ -11,6 +11,7 @@ export function TenantTabs({ tenantId, userCount }: { tenantId: string; userCoun
     { href: `${base}/users`, label: "Usuarios", count: userCount },
     { href: `${base}/roles`, label: "Roles" },
     { href: `${base}/modules`, label: "Módulos" },
+    { href: `${base}/subscription`, label: "Suscripción" },
     { href: `${base}/settings`, label: "Configuración" },
   ];
 

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { StatusBadge } from "@/components/admin/status-badge";
+import { SubscriptionBadge } from "@/components/admin/subscription-badge";
 import { primaryButtonClass } from "@/components/ui/form";
 import { listTenants } from "@/lib/admin/tenants";
 
@@ -40,6 +41,7 @@ export default async function AdminPage() {
                 <th className="px-5 py-3 font-medium">Taller</th>
                 <th className="px-5 py-3 font-medium">Propietario</th>
                 <th className="px-5 py-3 font-medium">Estado</th>
+                <th className="px-5 py-3 font-medium">Suscripción</th>
                 <th className="px-5 py-3 font-medium">Usuarios</th>
                 <th className="px-5 py-3 font-medium">Alta</th>
                 <th className="px-5 py-3">
@@ -72,6 +74,9 @@ export default async function AdminPage() {
                   </td>
                   <td className="px-5 py-3.5">
                     <StatusBadge status={tenant.status} />
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <SubscriptionBadge access={tenant.access} status={tenant.subscriptionStatus} />
                   </td>
                   <td className="px-5 py-3.5 text-zinc-700">{tenant.userCount}</td>
                   <td className="px-5 py-3.5 whitespace-nowrap text-zinc-500">
