@@ -3,6 +3,21 @@
 @theme inline {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Landing: tipografías cargadas en src/app/page.tsx */
+  --font-display: var(--font-archivo);
+  --font-body: var(--font-instrument);
+  --font-folio: var(--font-plex-mono);
+}
+
+@theme {
+  /* Tinta violeta de sello de mostrador y azul de tapete antiestático. */
+  --color-ink: #4f3dc7;
+  --color-ink-soft: #ece9fb;
+  --color-mat: #2f4858;
+  --color-mat-deep: #243a47;
+  --color-mat-line: #3d5a6b;
+  --color-mat-text: #b9c9d3;
 }
 
 html {
@@ -11,4 +26,73 @@ html {
 
 body {
   @apply bg-white text-zinc-900;
+}
+
+/* Golpe del sello: entra grande y sin tinta, cae y se asienta. */
+@keyframes stamp-hit {
+  0% {
+    opacity: 0;
+    transform: rotate(var(--stamp-tilt)) scale(1.9);
+  }
+  60% {
+    opacity: 0.95;
+    transform: rotate(var(--stamp-tilt)) scale(0.96);
+  }
+  100% {
+    opacity: 0.88;
+    transform: rotate(var(--stamp-tilt)) scale(1);
+  }
+}
+
+.stamp {
+  --stamp-tilt: -9deg;
+  transform: rotate(var(--stamp-tilt));
+  opacity: 0.88;
+  filter: url(#stamp-ink);
+  mix-blend-mode: multiply;
+  animation: stamp-hit 260ms cubic-bezier(0.3, 0, 0.2, 1) both;
+}
+
+@keyframes log-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.log-in {
+  animation: log-in 300ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stamp,
+  .log-in {
+    animation: none;
+  }
+}
+
+/* Línea de corte del talón: muescas a los lados y trazo punteado. */
+.perforation {
+  position: relative;
+  height: 1.5rem;
+  background:
+    radial-gradient(circle at 0 50%, var(--perf-bg, #fff) 0.6rem, transparent 0.65rem),
+    radial-gradient(circle at 100% 50%, var(--perf-bg, #fff) 0.6rem, transparent 0.65rem);
+}
+
+.perforation::after {
+  content: "";
+  position: absolute;
+  inset: 50% 1rem auto;
+  border-top: 2px dashed var(--color-zinc-300);
+}
+
+/* Cuadrícula impresa de los tapetes antiestáticos. */
+.mat-grid {
+  background-color: var(--color-mat);
+  background-image:
+    linear-gradient(var(--color-mat-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-mat-line) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-position: -1px -1px;
 }
