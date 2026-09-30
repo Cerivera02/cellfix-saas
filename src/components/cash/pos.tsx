@@ -5,6 +5,7 @@ import { PaymentDialog, type AccountOption } from "@/components/cash/payment-dia
 import { CustomerPicker } from "@/components/customers/customer-picker";
 import type { SelectOption } from "@/components/ui/select";
 import { dangerGhostButtonClass, ghostButtonClass, inputClass, primaryButtonClass } from "@/components/ui/form";
+import { IntegerInput } from "@/components/ui/money-input";
 import { searchItemsAction } from "@/lib/cash/actions";
 import type { SellableItem } from "@/lib/cash/core";
 import { computeLine, fromCents, toCents } from "@/lib/cash/money";
@@ -192,13 +193,12 @@ export function Pos({ accounts }: { accounts: AccountOption[] }) {
                     >
                       −
                     </button>
-                    <input
-                      type="number"
-                      min={1}
+                    <IntegerInput
+                      bare
                       aria-label={`Cantidad de ${line.item.name}`}
-                      value={line.quantity}
-                      onChange={(event) => setQuantity(line.item.id, Number(event.target.value))}
-                      className="h-8 w-14 rounded-lg border border-zinc-200 text-center text-sm tabular-nums"
+                      value={String(line.quantity)}
+                      onChange={(value) => setQuantity(line.item.id, Number(value))}
+                      className="h-8 w-14 rounded-lg border border-zinc-200 text-center text-sm"
                     />
                     <button
                       type="button"

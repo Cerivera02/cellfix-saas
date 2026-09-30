@@ -2,8 +2,8 @@
 
 import { useActionState } from "react";
 import { FormMessage } from "@/components/admin/form-message";
-import { Field, inputClass, primaryButtonClass } from "@/components/ui/form";
-import { MoneyInput } from "@/components/ui/money-input";
+import { Field, primaryButtonClass } from "@/components/ui/form";
+import { IntegerInput, MoneyInput } from "@/components/ui/money-input";
 import type { FormState } from "@/lib/form-state";
 import { MODULES, MODULE_KEYS, type ModuleKey } from "@/lib/modules";
 
@@ -32,14 +32,7 @@ export function PricingForm({
       <fieldset className="grid gap-4 sm:grid-cols-2">
         <legend className="mb-3 text-sm font-medium text-zinc-900">Prueba gratuita</legend>
         <Field label="Días de prueba" name="trialDays" error={errors?.trialDays} hint="Con todos los módulos activos.">
-          <input
-            id="trialDays"
-            name="trialDays"
-            type="text"
-            inputMode="numeric"
-            defaultValue={value("trialDays", defaults.trialDays)}
-            className={inputClass}
-          />
+          <IntegerInput id="trialDays" name="trialDays" defaultValue={value("trialDays", defaults.trialDays)} />
         </Field>
         <Field
           label="Días de gracia"
@@ -47,14 +40,7 @@ export function PricingForm({
           error={errors?.graceDays}
           hint="Uso normal con aviso; después se bloquea."
         >
-          <input
-            id="graceDays"
-            name="graceDays"
-            type="text"
-            inputMode="numeric"
-            defaultValue={value("graceDays", defaults.graceDays)}
-            className={inputClass}
-          />
+          <IntegerInput id="graceDays" name="graceDays" defaultValue={value("graceDays", defaults.graceDays)} />
         </Field>
       </fieldset>
 

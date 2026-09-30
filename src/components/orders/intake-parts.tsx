@@ -9,6 +9,7 @@ import {
   useRepairItemSearch,
 } from "@/components/orders/part-fields";
 import { Field, ghostButtonClass, inputClass } from "@/components/ui/form";
+import { IntegerInput } from "@/components/ui/money-input";
 import { AsyncSelect, type SelectOption } from "@/components/ui/select";
 import { fromCents, toCents } from "@/lib/cash/money";
 import type { FormState } from "@/lib/form-state";
@@ -114,15 +115,13 @@ export function IntakeStockParts({ id, error }: { id: string; error?: string }) 
               <label className="sr-only" htmlFor={`${id}-qty-${part.itemId}`}>
                 Cantidad de {part.name}
               </label>
-              <input
+              <IntegerInput
                 id={`${id}-qty-${part.itemId}`}
-                type="number"
-                min={1}
                 max={Math.max(limitOf(part), 1)}
                 value={part.quantity}
-                onChange={(event) => setQuantity(part.itemId, event.target.value)}
-                onBlur={(event) => setQuantity(part.itemId, event.target.value, true)}
-                className={`${inputClass} w-20 tabular-nums`}
+                onChange={(value) => setQuantity(part.itemId, value)}
+                onBlur={(event) => setQuantity(part.itemId, event.currentTarget.value, true)}
+                className="w-20"
               />
               <button type="button" onClick={() => remove(part.itemId)} className={ghostButtonClass}>
                 Quitar
@@ -165,15 +164,12 @@ export function IntakeFreePart({ id, state, showPrices }: { id: string; state: F
           />
         </Field>
         <Field label="Cantidad" name={`${id}-part-quantity`} error={state?.errors?.partQuantity}>
-          <input
+          <IntegerInput
             id={`${id}-part-quantity`}
             name="partQuantity"
-            type="number"
-            min={1}
             max={MAX_QUANTITY}
             value={quantity}
-            onChange={(event) => setQuantity(event.target.value)}
-            className={`${inputClass} tabular-nums`}
+            onChange={setQuantity}
           />
         </Field>
       </div>
@@ -345,15 +341,13 @@ export function IntakePartsToGet({ id, state, hasInventory }: { id: string; stat
               <label className="sr-only" htmlFor={`${id}-qty-${part.key}`}>
                 Cantidad de {part.description}
               </label>
-              <input
+              <IntegerInput
                 id={`${id}-qty-${part.key}`}
-                type="number"
-                min={1}
                 max={MAX_QUANTITY}
                 value={part.quantity}
-                onChange={(event) => setQuantity(part.key, event.target.value)}
-                onBlur={(event) => setQuantity(part.key, event.target.value, true)}
-                className={`${inputClass} w-20 tabular-nums`}
+                onChange={(value) => setQuantity(part.key, value)}
+                onBlur={(event) => setQuantity(part.key, event.currentTarget.value, true)}
+                className="w-20"
               />
               <button type="button" onClick={() => remove(part.key)} className={ghostButtonClass}>
                 Quitar

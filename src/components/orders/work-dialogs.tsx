@@ -4,7 +4,7 @@ import { useId, useState } from "react";
 import { FormMessage } from "@/components/admin/form-message";
 import { DialogButton, useDialogAction } from "@/components/ui/dialog-button";
 import { Field, inputClass, primaryButtonClass, secondaryButtonClass } from "@/components/ui/form";
-import { DecimalInput } from "@/components/ui/money-input";
+import { DecimalInput, IntegerInput } from "@/components/ui/money-input";
 import {
   MAX_QUANTITY,
   PriceTaxFields,
@@ -217,16 +217,14 @@ function PartForm({ action, onDone }: { action: Action; onDone: () => void }) {
         <AsyncSelect id={`${id}-item`} value={part} onChange={choosePart} loadOptions={loadParts} placeholder="Nombre o código de barras" />
       </Field>
       <Field label="Cantidad" name={`${id}-quantity`} error={state?.errors?.quantity}>
-        <input
+        <IntegerInput
           id={`${id}-quantity`}
           name="quantity"
-          type="number"
-          min={1}
           max={Math.max(max, 1)}
           value={quantity}
-          onChange={(event) => setQuantity(clampQuantity(event.target.value, max))}
+          onChange={(value) => setQuantity(clampQuantity(value, max))}
           aria-describedby={`${id}-stock`}
-          className={`${inputClass} tabular-nums sm:w-32`}
+          className="sm:w-32"
         />
         <p id={`${id}-stock`} aria-live="polite" className="text-xs text-zinc-500">
           {stockHint}
@@ -293,15 +291,13 @@ function FreePartForm({ action, showPrices, onDone }: { action: Action; showPric
         />
       </Field>
       <Field label="Cantidad" name={`${id}-quantity`} error={state?.errors?.quantity}>
-        <input
+        <IntegerInput
           id={`${id}-quantity`}
           name="quantity"
-          type="number"
-          min={1}
           max={MAX_QUANTITY}
           value={quantity}
-          onChange={(event) => setQuantity(event.target.value)}
-          className={`${inputClass} tabular-nums sm:w-32`}
+          onChange={setQuantity}
+          className="sm:w-32"
         />
       </Field>
       {showPrices && <PriceTaxFields id={id} state={state} priceLabel="Precio por pieza" quantity={pieces} />}

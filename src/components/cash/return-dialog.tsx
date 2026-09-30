@@ -4,6 +4,7 @@ import { useActionState, useId, useState } from "react";
 import { FormMessage } from "@/components/admin/form-message";
 import { Field, ghostButtonClass, inputClass, primaryButtonClass, secondaryButtonClass } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
+import { IntegerInput } from "@/components/ui/money-input";
 import { Select } from "@/components/ui/select";
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from "@/lib/cash/labels";
 import { fromCents, refundForLine } from "@/lib/cash/money";
@@ -80,20 +81,19 @@ function ReturnForm({ action, lines, onDone }: { action: Action; lines: ReturnLi
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <input
-                    type="number"
+                  <IntegerInput
+                    bare
                     name={`qty-${line.id}`}
-                    min={0}
                     max={remaining}
                     aria-label={`Piezas de ${line.itemName} a devolver`}
-                    value={quantities[line.id] ?? 0}
-                    onChange={(event) =>
+                    value={String(quantities[line.id] ?? 0)}
+                    onChange={(value) =>
                       setQuantities((current) => ({
                         ...current,
-                        [line.id]: Math.max(0, Math.min(remaining, Math.floor(Number(event.target.value)) || 0)),
+                        [line.id]: Math.max(0, Math.min(remaining, Math.floor(Number(value)) || 0)),
                       }))
                     }
-                    className="h-9 w-16 rounded-lg border border-zinc-200 text-center text-sm tabular-nums"
+                    className="h-9 w-16 rounded-lg border border-zinc-200 text-center text-sm"
                   />
                   <span className="text-xs whitespace-nowrap text-zinc-500">de {remaining}</span>
                 </div>
