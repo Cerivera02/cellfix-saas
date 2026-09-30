@@ -28,6 +28,12 @@ body {
   @apply bg-white text-zinc-900;
 }
 
+/* Edge dibuja su propio botón para ver la contraseña encima del nuestro. */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none;
+}
+
 /* Golpe del sello: entra grande y sin tinta, cae y se asienta. */
 @keyframes stamp-hit {
   0% {
