@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { cache } from "react";
 import { brandFonts } from "@/app/fonts";
-import { addDays, formatDay } from "@/lib/dates";
+import { formatDay } from "@/lib/dates";
 import { formatMoney } from "@/lib/inventory/format";
 import { ORDER_STATUS_LABELS, type OrderStatus } from "@/lib/orders/labels";
 import { toCents } from "@/lib/cash/money";
 import { getPublicTracking, type PublicTracking } from "@/lib/tracking/core";
+import { describeWarrantyRemaining, getWarrantyStatus } from "@/lib/warranties/status";
 
 // Página pública de seguimiento que abre el cliente con el enlace o el QR del comprobante.
 // No requiere sesión: la autoriza el token de la orden.
@@ -139,10 +140,8 @@ export default async function TrackingPage(props: PageProps<"/s/[slug]/[token]">
   const showEstimate = money.usesEstimate && money.estimatedCost !== null;
   const showMoney = !cancelled && (hasLines || money.usesEstimate || toCents(money.paidTotal) > 0);
   const showBalance = !delivered && (hasLines || money.usesEstimate);
-  const warrantyUntil =
-    delivered && order.outcome === "repaired" && order.warrantyDays > 0 && order.deliveredAt
-      ? addDays(order.deliveredAt, order.warrantyDays)
-      : null;
+  // Garantía del equipo reparado y entregado, con los días que le quedan.
+  const warranty = delivered ? getWarrantyStatus(order) : null;
   const photoBase = `/api/seguimiento/${encodeURIComponent(slug)}/${token}/photos`;
 
   return (
@@ -178,10 +177,20 @@ export default async function TrackingPage(props: PageProps<"/s/[slug]/[token]">
               Fecha estimada de entrega: <span className="font-medium">{formatDay(order.promisedOn)}</span>
             </p>
           )}
-          {warrantyUntil && (
-            <p className="mt-4 rounded-lg bg-ink-soft px-3.5 py-2.5 text-sm text-zinc-800">
-              Garantía: {order.warrantyName ?? `${order.warrantyDays} días`}, vigente hasta el{" "}
-              <span className="font-medium">{dateFormatter.format(warrantyUntil)}</span>.
+          {warranty && (
+            <p
+              className={`mt-4 rounded-lg px-3.5 py-2.5 text-sm ${warranty.active ? "bg-ink-soft text-zinc-800" : "bg-zinc-100 text-zinc-600"}`}
+            >
+              {warranty.active ? (
+                <>
+                  Garantía: {warranty.label} ·{" "}
+                  <span className="font-medium">{describeWarrantyRemaining(warranty, "customer")}</span>.
+                </>
+              ) : (
+                <>
+                  Garantía: {warranty.label} · La garantía terminó el {warranty.until}.
+                </>
+              )}
             </p>
           )}
         </Card>

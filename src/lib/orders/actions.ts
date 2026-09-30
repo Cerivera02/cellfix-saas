@@ -9,6 +9,7 @@ import { computeLine, fromCents, toCents } from "@/lib/cash/money";
 import { isPaymentMethod } from "@/lib/cash/labels";
 import { parseChargeRequest, type ChargeRequest } from "@/lib/cash/payment-request";
 import { isValidDay } from "@/lib/dates";
+import { queueOrderEmail, resendTrackingEmail, type OrderEmailContext } from "@/lib/email/order-notifications";
 import type { FormState } from "@/lib/form-state";
 import { InventoryError } from "@/lib/inventory/core";
 import {
@@ -47,6 +48,16 @@ async function authorize(...permissions: Permission[]) {
   return { session, tenantId: session.tenant.id, actor: { userId: session.user.id, userName: session.user.name } };
 }
 
+// Datos para los correos al cliente, que se envían después de guardar.
+function emailContext(session: Awaited<ReturnType<typeof authorize>>): OrderEmailContext {
+  return {
+    tenantId: session.tenantId,
+    tenantSlug: session.session.tenant.slug,
+    modules: session.session.modules,
+    actor: session.actor,
+  };
+}
+
 function knownMessage(error: unknown) {
   if (error instanceof OrderError || error instanceof CashError || error instanceof InventoryError) return error.message;
   console.error("Error en órdenes:", error);
@@ -72,7 +83,8 @@ export type ChargeResult = { message?: string; success?: string };
 // ---------------------------------------------------------------------------
 
 export async function createOrderAction(_prevState: FormState, formData: FormData): Promise<FormState> {
-  const { session, tenantId, actor } = await authorize("orders.intake");
+  const auth = await authorize("orders.intake");
+  const { session, tenantId, actor } = auth;
   const { input, context: orderContext, errors: orderErrors } = parseOrderForm(formData);
   // Sin permiso para cobrar, la orden se registra sin anticipo ni pago del diagnóstico.
   // La refacción se elige del inventario si el taller tiene el módulo; si no, se captura a mano.
@@ -100,6 +112,8 @@ export async function createOrderAction(_prevState: FormState, formData: FormDat
     return toErrorState(error, context);
   }
 
+  // El enlace de seguimiento se envía por correo después de responder.
+  await queueOrderEmail(emailContext(auth), orderId, "received");
   redirect(`/dashboard/orders/${orderId}?nueva=1`);
 }
 
@@ -168,7 +182,8 @@ export async function updateDiagnosisAction(orderId: string, _prevState: FormSta
 }
 
 export async function changeStatusAction(orderId: string, _prevState: FormState, formData: FormData): Promise<FormState> {
-  const { session, tenantId, actor } = await authorize("repairs.work");
+  const auth = await authorize("repairs.work");
+  const { session, tenantId, actor } = auth;
   const fields = {
     status: readField(formData, "status", 30),
     outcome: readField(formData, "outcome", 20),
@@ -197,8 +212,19 @@ export async function changeStatusAction(orderId: string, _prevState: FormState,
     return toErrorState(error, { fields });
   }
 
+  // Al quedar lista se avisa al cliente por correo (una sola vez por orden), después de responder.
+  if (fields.status === "ready") await queueOrderEmail(emailContext(auth), orderId, "ready");
   refresh();
   return { success: "Estado actualizado." };
+}
+
+// Reenvía al cliente el enlace de seguimiento por correo.
+export async function resendTrackingEmailAction(orderId: string): Promise<FormState> {
+  const auth = await authorize("orders.intake");
+  const result = await resendTrackingEmail(emailContext(auth), orderId);
+  if (!result.sent) return { message: result.reason };
+  refresh();
+  return { success: `Enviado a ${result.to}.` };
 }
 
 export type RepairItemOption = { id: string; name: string; trackStock: boolean; stock: number; price: string | null };

@@ -9,14 +9,18 @@ import type { FormState } from "@/lib/form-state";
 export function RepairSettingsForm({
   action,
   defaults,
+  hasTracking,
 }: {
   action: (state: FormState, formData: FormData) => Promise<FormState>;
-  defaults: { diagnosisFee: string; diagnosisCredit: boolean };
+  defaults: { diagnosisFee: string; diagnosisCredit: boolean; notifyCustomers: boolean };
+  // Con el módulo de seguimiento también se envía el enlace al recibir el equipo.
+  hasTracking: boolean;
 }) {
   const [state, formAction, pending] = useActionState(action, undefined);
   // Tras guardar o con errores se muestra lo último enviado.
   const diagnosisFee = state?.fields?.diagnosisFee ?? defaults.diagnosisFee;
   const diagnosisCredit = state?.fields ? state.fields.diagnosisCredit === "on" : defaults.diagnosisCredit;
+  const notifyCustomers = state?.fields ? state.fields.notifyCustomers === "on" : defaults.notifyCustomers;
 
   return (
     <form action={formAction} className="flex max-w-xl flex-col gap-6" noValidate>
@@ -51,6 +55,28 @@ export function RepairSettingsForm({
             <span className="block text-xs text-zinc-500">
               Si se hace la reparación, lo pagado de diagnóstico cuenta como anticipo (nunca se cobra menos que el
               diagnóstico); si se entrega sin reparación, el diagnóstico se cobra completo.
+            </span>
+          </span>
+        </label>
+      </section>
+
+      <section className="flex flex-col gap-4 rounded-2xl border border-zinc-200 bg-white p-5">
+        <h2 className="font-medium">Avisos al cliente</h2>
+        <label className="flex items-start gap-2.5 text-sm text-zinc-700">
+          <input
+            key={String(notifyCustomers)}
+            type="checkbox"
+            name="notifyCustomers"
+            defaultChecked={notifyCustomers}
+            className="mt-0.5 size-4 accent-zinc-900"
+          />
+          <span>
+            Enviar correos al cliente
+            <span className="block text-xs text-zinc-500">
+              {hasTracking
+                ? "Al recibir el equipo se le envía el enlace para seguir la reparación y, cuando la orden queda lista, un aviso para que pase a recogerlo."
+                : "Cuando la orden queda lista se le envía un aviso para que pase a recoger su equipo."}{" "}
+              Solo a clientes con correo registrado.
             </span>
           </span>
         </label>

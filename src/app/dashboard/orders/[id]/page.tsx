@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CancelOrderDialog, DeliverDialog, OrderPaymentDialog } from "@/components/orders/charge-dialogs";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
+import { ResendTrackingEmail } from "@/components/orders/resend-tracking-email";
 import { UnlockValue } from "@/components/orders/unlock-view";
 import { TrackingLink } from "@/components/orders/tracking-link";
 import { PhotoEvidence } from "@/components/photos/photo-evidence";
@@ -21,7 +22,7 @@ import { listBankAccounts } from "@/lib/cash/core";
 import { dateTimeFormatter } from "@/lib/cash/format";
 import { PAYMENT_METHOD_LABELS } from "@/lib/cash/labels";
 import { fromCents, toCents } from "@/lib/cash/money";
-import { addDays, formatDay } from "@/lib/dates";
+import { formatDay } from "@/lib/dates";
 import { describeTax, formatMoney } from "@/lib/inventory/format";
 import { hasModule } from "@/lib/modules";
 import {
@@ -34,6 +35,7 @@ import {
   deliverOrderAction,
   releaseOrderAction,
   removeLineAction,
+  resendTrackingEmailAction,
   takeOrderAction,
   updateDiagnosisAction,
 } from "@/lib/orders/actions";
@@ -41,6 +43,7 @@ import { getOrder, type OrderLine } from "@/lib/orders/core";
 import { listPhotos } from "@/lib/photos/core";
 import { getOrderTrackingUrl } from "@/lib/tracking/core";
 import { listWarranties } from "@/lib/warranties/core";
+import { describeWarrantyRemaining, getWarrantyStatus } from "@/lib/warranties/status";
 import {
   ORDER_ACCESS_PERMISSIONS,
   ORDER_OUTCOME_LABELS,
@@ -55,8 +58,6 @@ import {
 export const metadata: Metadata = {
   title: "Orden — CellFix",
 };
-
-const dayDateFormatter = new Intl.DateTimeFormat("es-MX", { dateStyle: "medium" });
 
 function Detail({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
   return (
@@ -135,10 +136,7 @@ export default async function OrderPage(props: PageProps<"/dashboard/orders/[id]
   const canRemove = (line: OrderLine) =>
     active && !line.isDiagnosis && (line.kind === "part" ? canWork || canFixIntake : canSeePrices);
   const showRemoveColumn = order.lines.some(canRemove);
-  const warrantyUntil =
-    order.deliveredAt && order.outcome === "repaired" && order.warrantyDays > 0
-      ? addDays(order.deliveredAt, order.warrantyDays)
-      : null;
+  const warranty = getWarrantyStatus(order);
   const lastChange = [...order.payments].reverse().find((payment) => toCents(payment.changeAmount) > 0);
 
   return (
@@ -249,11 +247,9 @@ export default async function OrderPage(props: PageProps<"/dashboard/orders/[id]
       {order.status === "cancelled" && order.cancelReason && (
         <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-800">Cancelada: {order.cancelReason}</p>
       )}
-      {warrantyUntil && (
+      {warranty && (
         <p className="mt-4 rounded-lg bg-zinc-100 px-4 py-3 text-sm text-zinc-700">
-          Garantía: {order.warrantyName ?? `${order.warrantyDays} días`}, vigente hasta el{" "}
-          {dayDateFormatter.format(warrantyUntil)}
-          {warrantyUntil < new Date() && " (vencida)"}.
+          Garantía: {warranty.label} · {describeWarrantyRemaining(warranty, "staff")}.
         </p>
       )}
 
@@ -342,6 +338,11 @@ export default async function OrderPage(props: PageProps<"/dashboard/orders/[id]
       {trackingUrl && (
         <section className="mt-4 rounded-2xl border border-zinc-200 bg-white px-5 py-4">
           <TrackingLink url={trackingUrl} />
+          {order.customerEmail && can("orders.intake") && (
+            <div className="mt-1 flex justify-end">
+              <ResendTrackingEmail action={resendTrackingEmailAction.bind(null, order.id)} />
+            </div>
+          )}
         </section>
       )}
 
