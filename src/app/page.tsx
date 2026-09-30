@@ -1,15 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { connection } from "next/server";
 import { FaqAccordion } from "@/components/faq-accordion";
 import { LeadForm } from "@/components/lead-form";
 import { EvidenceShowcase } from "@/components/landing/evidence-showcase";
+import { PricingSection } from "@/components/landing/pricing-section";
 import { RolePreview } from "@/components/landing/role-preview";
 import { ServiceTicket } from "@/components/landing/service-ticket";
 import { brandFonts } from "@/app/fonts";
+import { getPublicPricing, type PublicPricing } from "@/lib/billing/pricing";
 
 const title = "CellFix — Sistema para talleres de reparación de celulares y electrónica";
 const description =
-  "Órdenes de servicio con folio, caja, inventario de refacciones y clientes en un solo lugar. Para talleres de celulares, tablets, laptops, televisiones y consolas.";
+  "Órdenes de servicio con folio, caja, inventario de refacciones y clientes en un solo lugar. Para talleres de celulares, tablets, laptops, televisiones y consolas. Prueba gratis, sin tarjeta.";
 
 export const metadata: Metadata = {
   title,
@@ -76,29 +79,48 @@ const modules = [
   },
 ];
 
-const faqs = [
-  {
-    question: "¿Necesito instalar algo?",
-    answer: "No. CellFix funciona desde el navegador en computadora, tablet o celular.",
-  },
-  {
-    question: "¿Sirve si no reparo celulares?",
-    answer: "Sí. Funciona para cualquier taller de electrónica: laptops, televisiones, consolas, relojes, teclados y más.",
-  },
-  {
-    question: "¿Mis técnicos pueden ver lo que cobro?",
-    answer: "Solo si tú se lo permites. Cada persona tiene un rol, y los precios y cobros quedan para quien atiende la caja.",
-  },
-  {
-    question: "¿Cuándo estará disponible?",
-    answer: "Estamos abriendo acceso anticipado. Déjanos tus datos y te escribimos cuando tengas tu lugar.",
-  },
-];
+function buildFaqs(trialDays: number | null) {
+  const trial = trialDays ? `${trialDays} días gratis` : "un periodo de prueba gratis";
+  return [
+    {
+      question: "¿Necesito instalar algo?",
+      answer: "No. CellFix funciona desde el navegador en computadora, tablet o celular.",
+    },
+    {
+      question: "¿Sirve si no reparo celulares?",
+      answer: "Sí. Funciona para cualquier taller de electrónica: laptops, televisiones, consolas, relojes, teclados y más.",
+    },
+    {
+      question: "¿Mis técnicos pueden ver lo que cobro?",
+      answer: "Solo si tú se lo permites. Cada persona tiene un rol, y los precios y cobros quedan para quien atiende la caja.",
+    },
+    {
+      question: "¿Cómo funciona la prueba y el cobro?",
+      answer: `Al crear tu cuenta tienes ${trial} con todos los módulos, sin tarjeta. Después eliges los módulos que quieres conservar y el cobro es mensual. Puedes cancelar cuando quieras.`,
+    },
+  ];
+}
+
+// Los precios viven en la base de datos y se editan desde el panel administrativo. Si no se
+// pueden leer (p. ej. antes de aplicar la migración de cobros), la landing sigue sin ellos.
+async function loadPricing(): Promise<PublicPricing | null> {
+  try {
+    return await getPublicPricing();
+  } catch (error) {
+    console.warn("No se pudieron leer los precios públicos:", error);
+    return null;
+  }
+}
 
 const focusRing =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
 
-export default function Home() {
+export default async function Home() {
+  // Se renderiza en cada visita para que un cambio de precio se vea sin reconstruir.
+  await connection();
+  const pricing = await loadPricing();
+  const faqs = buildFaqs(pricing?.trialDays ?? null);
+
   return (
     <div
       className={`${brandFonts} flex flex-1 flex-col font-body`}
@@ -115,18 +137,19 @@ export default function Home() {
             <a href="#recorrido" className={`rounded hover:text-zinc-900 ${focusRing}`}>El recorrido</a>
             <a href="#evidencia" className={`rounded hover:text-zinc-900 ${focusRing}`}>Evidencia</a>
             <a href="#taller" className={`rounded hover:text-zinc-900 ${focusRing}`}>Todo el taller</a>
+            <a href="#precios" className={`rounded hover:text-zinc-900 ${focusRing}`}>Precios</a>
             <a href="#preguntas" className={`rounded hover:text-zinc-900 ${focusRing}`}>Preguntas</a>
           </nav>
           <div className="flex items-center gap-4">
             <Link href="/login" className={`hidden rounded text-sm font-medium text-zinc-600 hover:text-zinc-900 sm:block ${focusRing}`}>
               Iniciar sesión
             </Link>
-            <a
-              href="#contacto"
+            <Link
+              href="/registro"
               className={`rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700 ${focusRing}`}
             >
-              Solicitar acceso
-            </a>
+              Crear cuenta
+            </Link>
           </div>
         </div>
       </header>
@@ -137,7 +160,7 @@ export default function Home() {
           <div className="mx-auto grid max-w-6xl items-center gap-14 px-4 pt-16 pb-20 sm:px-6 md:pt-24 md:pb-28 lg:grid-cols-[1.1fr_1fr]">
             <div>
               <p className="font-display text-xs font-semibold tracking-[0.2em] text-ink uppercase [font-stretch:80%]">
-                Acceso anticipado abierto
+                {pricing ? `Prueba gratis ${pricing.trialDays} días · Sin tarjeta` : "Prueba gratis · Sin tarjeta"}
               </p>
               <h1 className="mt-5 font-display text-[2.6rem] leading-[0.98] font-extrabold tracking-tight text-balance [font-stretch:118%] sm:text-6xl">
                 Del mostrador a la entrega, cada equipo con su folio.
@@ -147,12 +170,12 @@ export default function Home() {
                 caja, inventario y clientes en un solo lugar, desde el navegador.
               </p>
               <div className="mt-9 flex flex-wrap gap-3">
-                <a
-                  href="#contacto"
+                <Link
+                  href="/registro"
                   className={`rounded-lg bg-zinc-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-zinc-700 ${focusRing}`}
                 >
-                  Quiero probarlo
-                </a>
+                  Empieza tu prueba gratis
+                </Link>
                 <a
                   href="#recorrido"
                   className={`rounded-lg border border-zinc-300 bg-white px-5 py-3 text-sm font-medium text-zinc-700 transition hover:border-zinc-400 ${focusRing}`}
@@ -261,6 +284,8 @@ export default function Home() {
           </div>
         </section>
 
+        <PricingSection pricing={pricing} />
+
         {/* Preguntas */}
         <section id="preguntas" className="scroll-mt-16 border-t border-zinc-200">
           <div className="mx-auto max-w-3xl px-4 py-24 sm:px-6">
@@ -276,11 +301,11 @@ export default function Home() {
           <div className="mx-auto grid max-w-6xl gap-12 px-4 py-24 sm:px-6 lg:grid-cols-[1fr_1.4fr]">
             <div>
               <h2 className="font-display text-3xl font-bold tracking-tight [font-stretch:112%] sm:text-4xl">
-                Aparta tu lugar
+                ¿Tienes dudas? Escríbenos
               </h2>
               <p className="mt-4 leading-relaxed text-zinc-600">
-                Cuéntanos sobre tu taller. Te damos acceso anticipado y te acompañamos a dar de alta tu
-                inventario, tu equipo y tus primeras órdenes.
+                Cuéntanos cómo trabaja tu taller y te decimos si CellFix te sirve, o qué módulos te convienen
+                antes de empezar tu prueba.
               </p>
             </div>
             <div className="rounded-2xl border border-zinc-200 bg-white p-6 sm:p-8">

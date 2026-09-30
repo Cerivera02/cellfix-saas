@@ -102,3 +102,11 @@ input::-ms-clear {
   background-size: 48px 48px;
   background-position: -1px -1px;
 }
+
+/* Ticket térmico de la cotización: el borde inferior queda dentado, como cortado de la impresora. */
+.receipt {
+  --tooth: 10px;
+  mask:
+    linear-gradient(#000 0 0) top / 100% calc(100% - var(--tooth)) no-repeat,
+    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / calc(var(--tooth) * 2) var(--tooth) repeat-x;
+}
