@@ -2,36 +2,27 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PrintButton } from "@/components/cash/print-button";
+import { TicketHeader } from "@/components/tickets/ticket-header";
+import { TicketDivider as Divider, TicketPaper, TicketRow } from "@/components/tickets/ticket-paper";
 import { requireAnyTenantPermission } from "@/lib/auth/session";
 import { getSale } from "@/lib/cash/core";
 import { dateTimeFormatter } from "@/lib/cash/format";
 import { PAYMENT_METHOD_LABELS } from "@/lib/cash/labels";
 import { toCents } from "@/lib/cash/money";
 import { formatMoney } from "@/lib/inventory/format";
+import { getTicketSettings } from "@/lib/settings/core";
+import { DEFAULT_SALE_FOOTER } from "@/lib/settings/ticket";
 
 export const metadata: Metadata = {
   title: "Ticket — CellFix",
 };
 
-function TicketRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
-  return (
-    <div className={`flex justify-between gap-3 ${strong ? "text-[13px] font-bold" : ""}`}>
-      <span>{label}</span>
-      <span className="tabular-nums">{value}</span>
-    </div>
-  );
-}
-
-function Divider() {
-  return <hr className="my-2 border-t border-dashed border-zinc-400" />;
-}
-
-// Ticket de 80 mm. Al imprimir se ocultan el menú y los botones (clases print:*).
+// Ticket en papel térmico (58 u 80 mm) con los datos del negocio de Configuración. Al imprimir se ocultan el menú y los botones (clases print:*).
 export default async function TicketPage(props: PageProps<"/dashboard/cash/sales/[id]/ticket">) {
   const session = await requireAnyTenantPermission(["sales.create", "cash.view"]);
   const { id } = await props.params;
 
-  const sale = await getSale(session.tenant.id, id);
+  const [sale, settings] = await Promise.all([getSale(session.tenant.id, id), getTicketSettings(session.tenant.id)]);
   if (!sale) notFound();
 
   return (
@@ -43,14 +34,13 @@ export default async function TicketPage(props: PageProps<"/dashboard/cash/sales
         <PrintButton label="Imprimir ticket" />
       </div>
 
-      <article className="mx-auto w-full max-w-[80mm] bg-white p-4 font-mono text-[12px] leading-snug text-black shadow-sm ring-1 ring-zinc-200 print:max-w-none print:p-0 print:shadow-none print:ring-0">
-        <header className="text-center">
-          <p className="text-[14px] font-bold">{session.tenant.name}</p>
+      <TicketPaper width={settings.paperWidth}>
+        <TicketHeader business={settings.business}>
           <p>Venta #{sale.folio}</p>
           <p>{dateTimeFormatter.format(sale.createdAt)}</p>
           {sale.userName && <p>Atendió: {sale.userName}</p>}
           {sale.customerName && <p>Cliente: {sale.customerName}</p>}
-        </header>
+        </TicketHeader>
 
         <Divider />
 
@@ -99,8 +89,8 @@ export default async function TicketPage(props: PageProps<"/dashboard/cash/sales
         )}
 
         <Divider />
-        <p className="text-center">¡Gracias por su compra!</p>
-      </article>
+        <p className="text-center whitespace-pre-line">{settings.saleFooter || DEFAULT_SALE_FOOTER}</p>
+      </TicketPaper>
     </>
   );
 }
