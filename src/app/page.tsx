@@ -1,40 +1,79 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { FaqAccordion } from "@/components/faq-accordion";
 import { LeadForm } from "@/components/lead-form";
+import { EvidenceShowcase } from "@/components/landing/evidence-showcase";
+import { RolePreview } from "@/components/landing/role-preview";
+import { ServiceTicket } from "@/components/landing/service-ticket";
+import { brandFonts } from "@/app/fonts";
 
-const devices = ["Celulares", "Tablets", "Televisores", "Laptops", "Teclados", "Consolas", "Componentes"];
+const title = "CellFix — Sistema para talleres de reparación de celulares y electrónica";
+const description =
+  "Órdenes de servicio con folio, caja, inventario de refacciones y clientes en un solo lugar. Para talleres de celulares, tablets, laptops, televisiones y consolas.";
 
-const features = [
+export const metadata: Metadata = {
+  title,
+  description,
+  openGraph: { title, description, type: "website", locale: "es_MX", siteName: "CellFix" },
+  twitter: { card: "summary", title, description },
+};
+
+const devices = ["Celulares", "Tablets", "Laptops", "Televisiones", "Consolas", "Relojes", "Teclados"];
+
+// Los estados reales de una orden en CellFix, en el orden en que suceden.
+const journey = [
   {
-    title: "Órdenes en un solo lugar",
-    description: "Registra equipo, falla, accesorios y fotos al recibirlo. Cada orden con su folio único.",
+    status: "Recibido",
+    description:
+      "Cliente, equipo, falla y accesorios. El desbloqueo se guarda como PIN, contraseña o el patrón dibujado en pantalla, y las fotos del equipo se toman con el celular escaneando un código QR.",
   },
   {
-    title: "Estados claros",
-    description: "Recibido, en diagnóstico, en reparación, listo y entregado. Sin hojas de papel perdidas.",
+    status: "En diagnóstico",
+    description: "El técnico toma la orden desde «Por tomar» y anota lo que encontró.",
   },
   {
-    title: "Clientes y equipos",
-    description: "Historial por cliente y por dispositivo: qué se reparó, cuándo y cuánto costó.",
+    status: "Esperando autorización",
+    description: "Presupuesto de refacciones y mano de obra para que el cliente decida antes de continuar.",
   },
   {
-    title: "Presupuestos y anticipos",
-    description: "Cotiza, registra anticipos y conoce el saldo pendiente de cada orden.",
+    status: "Esperando refacción",
+    description: "Si falta la pieza, la orden queda en pausa sin perderse entre las demás.",
   },
   {
-    title: "Avisos solo cuando importan",
-    description: "Un correo al cliente cuando su equipo está listo. Nada de spam ni notificaciones de más.",
+    status: "En reparación",
+    description: "Las refacciones que se usan se descuentan del inventario.",
   },
   {
-    title: "Para todo tu equipo",
-    description: "Recepción, técnicos y administración con acceso a lo que cada uno necesita.",
+    status: "Listo para entregar",
+    description: "La orden pasa a «Listas para entregar» para que el mostrador la ubique al momento.",
+  },
+  {
+    status: "Entregado",
+    description: "Se cobra el saldo con el anticipo ya descontado y se imprime el ticket de 80 mm.",
   },
 ];
 
-const steps = [
-  { title: "Recibe", description: "Crea la orden en segundos con los datos del cliente y del equipo." },
-  { title: "Repara", description: "Tu técnico actualiza el estado y registra piezas y notas." },
-  { title: "Entrega", description: "El cliente recibe un aviso, liquida y la orden se cierra." },
+const modules = [
+  {
+    label: "Caja",
+    description: "Apertura y corte de turno, ventas de mostrador, devoluciones y tickets.",
+  },
+  {
+    label: "Inventario",
+    description: "Refacciones y accesorios por categoría, con existencias y movimientos.",
+  },
+  {
+    label: "Compras",
+    description: "Pedidos a proveedores y los pagos que les vas haciendo.",
+  },
+  {
+    label: "Clientes",
+    description: "Historial de reparaciones por cliente y sus datos fiscales: RFC y régimen del SAT.",
+  },
+  {
+    label: "Equipo",
+    description: "Usuarios con roles del sistema o armados a la medida de tu taller.",
+  },
 ];
 
 const faqs = [
@@ -44,7 +83,11 @@ const faqs = [
   },
   {
     question: "¿Sirve si no reparo celulares?",
-    answer: "Sí. Funciona para cualquier taller de electrónica: televisores, consolas, laptops, teclados y más.",
+    answer: "Sí. Funciona para cualquier taller de electrónica: laptops, televisiones, consolas, relojes, teclados y más.",
+  },
+  {
+    question: "¿Mis técnicos pueden ver lo que cobro?",
+    answer: "Solo si tú se lo permites. Cada persona tiene un rol, y los precios y cobros quedan para quien atiende la caja.",
   },
   {
     question: "¿Cuándo estará disponible?",
@@ -52,34 +95,35 @@ const faqs = [
   },
 ];
 
-const sampleOrders = [
-  { id: "#1042", device: "iPhone 13 · Pantalla", status: "Listo", tone: "bg-emerald-50 text-emerald-700" },
-  { id: "#1041", device: "Samsung TV 55\" · Sin imagen", status: "En reparación", tone: "bg-amber-50 text-amber-700" },
-  { id: "#1040", device: "iPad Air · Batería", status: "Diagnóstico", tone: "bg-zinc-100 text-zinc-600" },
-  { id: "#1039", device: "Teclado mecánico · Switches", status: "Entregado", tone: "bg-zinc-100 text-zinc-400" },
-];
+const focusRing =
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
 
 export default function Home() {
   return (
-    <>
-      <header className="sticky top-0 z-10 border-b border-zinc-100 bg-white/80 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <a href="#" className="flex items-center gap-2 text-base font-semibold tracking-tight">
-            <span className="grid size-7 place-items-center rounded-md bg-zinc-900 text-xs text-white">CF</span>
-            CellFix
+    <div
+      className={`${brandFonts} flex flex-1 flex-col font-body`}
+    >
+      <header className="sticky top-0 z-20 border-b border-zinc-200/70 bg-zinc-50/85 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
+          <a href="#" className={`flex items-center gap-2 rounded-md ${focusRing}`}>
+            <span className="grid size-7 place-items-center rounded-md bg-zinc-900 font-display text-xs font-bold text-white">
+              CF
+            </span>
+            <span className="font-display text-lg font-bold tracking-tight [font-stretch:112%]">CellFix</span>
           </a>
           <nav className="hidden items-center gap-8 text-sm text-zinc-600 md:flex">
-            <a href="#funciones" className="hover:text-zinc-900">Funciones</a>
-            <a href="#como-funciona" className="hover:text-zinc-900">Cómo funciona</a>
-            <a href="#preguntas" className="hover:text-zinc-900">Preguntas</a>
+            <a href="#recorrido" className={`rounded hover:text-zinc-900 ${focusRing}`}>El recorrido</a>
+            <a href="#evidencia" className={`rounded hover:text-zinc-900 ${focusRing}`}>Evidencia</a>
+            <a href="#taller" className={`rounded hover:text-zinc-900 ${focusRing}`}>Todo el taller</a>
+            <a href="#preguntas" className={`rounded hover:text-zinc-900 ${focusRing}`}>Preguntas</a>
           </nav>
           <div className="flex items-center gap-4">
-            <Link href="/login" className="text-sm font-medium text-zinc-600 hover:text-zinc-900">
+            <Link href="/login" className={`hidden rounded text-sm font-medium text-zinc-600 hover:text-zinc-900 sm:block ${focusRing}`}>
               Iniciar sesión
             </Link>
             <a
               href="#contacto"
-              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700"
+              className={`rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700 ${focusRing}`}
             >
               Solicitar acceso
             </a>
@@ -88,117 +132,155 @@ export default function Home() {
       </header>
 
       <main className="flex-1">
-        {/* Hero */}
-        <section className="mx-auto grid max-w-6xl items-center gap-16 px-6 py-20 md:py-28 lg:grid-cols-2">
-          <div>
-            <p className="mb-4 inline-block rounded-full border border-zinc-200 px-3 py-1 text-xs text-zinc-600">
-              Acceso anticipado abierto
-            </p>
-            <h1 className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
-              Las órdenes de tu taller de reparación, en orden.
-            </h1>
-            <p className="mt-6 max-w-lg text-lg text-zinc-600 text-pretty">
-              CellFix es un sistema simple para recibir, dar seguimiento y entregar reparaciones de
-              celulares, tablets, televisores y cualquier equipo electrónico.
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <a
-                href="#contacto"
-                className="rounded-lg bg-zinc-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-zinc-700"
-              >
-                Quiero probarlo
-              </a>
-              <a
-                href="#funciones"
-                className="rounded-lg border border-zinc-200 px-5 py-3 text-sm font-medium text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50"
-              >
-                Ver funciones
-              </a>
-            </div>
-          </div>
-
-          {/* Vista previa ilustrativa del panel */}
-          <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-3 shadow-sm" aria-hidden="true">
-            <div className="rounded-xl border border-zinc-200 bg-white">
-              <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-4">
-                <p className="text-sm font-medium">Órdenes de hoy</p>
-                <span className="rounded-md bg-zinc-900 px-2.5 py-1 text-xs text-white">+ Nueva</span>
+        {/* Hero: el talón de servicio es la tesis de la página. */}
+        <section className="overflow-hidden bg-zinc-50 [--perf-bg:var(--color-zinc-50)]">
+          <div className="mx-auto grid max-w-6xl items-center gap-14 px-4 pt-16 pb-20 sm:px-6 md:pt-24 md:pb-28 lg:grid-cols-[1.1fr_1fr]">
+            <div>
+              <p className="font-display text-xs font-semibold tracking-[0.2em] text-ink uppercase [font-stretch:80%]">
+                Acceso anticipado abierto
+              </p>
+              <h1 className="mt-5 font-display text-[2.6rem] leading-[0.98] font-extrabold tracking-tight text-balance [font-stretch:118%] sm:text-6xl">
+                Del mostrador a la entrega, cada equipo con su folio.
+              </h1>
+              <p className="mt-6 max-w-lg text-lg leading-relaxed text-zinc-600 text-pretty">
+                CellFix es el sistema para talleres de reparación de celulares y electrónica. Órdenes,
+                caja, inventario y clientes en un solo lugar, desde el navegador.
+              </p>
+              <div className="mt-9 flex flex-wrap gap-3">
+                <a
+                  href="#contacto"
+                  className={`rounded-lg bg-zinc-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-zinc-700 ${focusRing}`}
+                >
+                  Quiero probarlo
+                </a>
+                <a
+                  href="#recorrido"
+                  className={`rounded-lg border border-zinc-300 bg-white px-5 py-3 text-sm font-medium text-zinc-700 transition hover:border-zinc-400 ${focusRing}`}
+                >
+                  Ver cómo avanza una orden
+                </a>
               </div>
-              <ul className="divide-y divide-zinc-100">
-                {sampleOrders.map((order) => (
-                  <li key={order.id} className="flex items-center justify-between gap-4 px-5 py-3.5">
-                    <div className="min-w-0">
-                      <p className="font-mono text-xs text-zinc-400">{order.id}</p>
-                      <p className="truncate text-sm text-zinc-800">{order.device}</p>
-                    </div>
-                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${order.tone}`}>
-                      {order.status}
-                    </span>
-                  </li>
-                ))}
-              </ul>
             </div>
+
+            <ServiceTicket />
           </div>
         </section>
 
         {/* Dispositivos */}
-        <section className="border-y border-zinc-100 bg-zinc-50/60">
-          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-8 gap-y-3 px-6 py-6 text-sm text-zinc-500">
-            <span className="text-zinc-400">Para talleres que reparan</span>
-            {devices.map((device) => (
-              <span key={device} className="font-medium text-zinc-700">{device}</span>
+        <section className="border-y border-zinc-200 bg-white">
+          <p className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-3 gap-y-2 px-4 py-5 text-sm text-zinc-500 sm:px-6">
+            <span>Para talleres que reparan</span>
+            {devices.map((device, index) => (
+              <span key={device} className="font-medium text-zinc-800">
+                {device}
+                {index < devices.length - 1 && <span className="ml-3 text-zinc-300" aria-hidden="true">·</span>}
+              </span>
             ))}
-          </div>
+          </p>
         </section>
 
-        {/* Funciones */}
-        <section id="funciones" className="mx-auto max-w-6xl scroll-mt-16 px-6 py-24">
-          <div className="max-w-2xl">
-            <h2 className="text-3xl font-semibold tracking-tight">Lo necesario, nada de más</h2>
-            <p className="mt-4 text-zinc-600">
-              Diseñado para el día a día del mostrador y del banco de trabajo.
-            </p>
-          </div>
-          <div className="mt-14 grid gap-px overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-200 sm:grid-cols-2 lg:grid-cols-3">
-            {features.map((feature) => (
-              <div key={feature.title} className="bg-white p-8">
-                <h3 className="font-medium">{feature.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-zinc-600">{feature.description}</p>
-              </div>
-            ))}
-          </div>
-        </section>
+        {/* El recorrido: los siete estados reales de una orden, sobre tapete antiestático. */}
+        <section id="recorrido" className="mat-grid scroll-mt-16 text-white">
+          <div className="mx-auto max-w-6xl px-4 py-24 sm:px-6">
+            <div className="max-w-2xl">
+              <h2 className="font-display text-3xl font-bold tracking-tight [font-stretch:112%] sm:text-4xl">
+                El recorrido de un equipo
+              </h2>
+              <p className="mt-4 text-mat-text">
+                Siete estados, del mostrador al banco de trabajo y de regreso. Cualquiera en el taller sabe
+                dónde está cada orden sin preguntar.
+              </p>
+            </div>
 
-        {/* Cómo funciona */}
-        <section id="como-funciona" className="scroll-mt-16 bg-zinc-900 text-white">
-          <div className="mx-auto max-w-6xl px-6 py-24">
-            <h2 className="text-3xl font-semibold tracking-tight">Cómo funciona</h2>
-            <ol className="mt-14 grid gap-10 md:grid-cols-3">
-              {steps.map((step, index) => (
-                <li key={step.title}>
-                  <span className="font-mono text-sm text-zinc-500">0{index + 1}</span>
-                  <h3 className="mt-3 text-xl font-medium">{step.title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-zinc-400">{step.description}</p>
+            <ol className="mt-14 border-l border-mat-text/30">
+              {journey.map((step, index) => (
+                <li
+                  key={step.status}
+                  className="relative grid gap-2 py-5 pl-8 sm:grid-cols-[16rem_1fr] sm:gap-8 sm:pl-10"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="absolute top-[1.65rem] -left-[5px] size-[9px] rounded-full bg-white ring-4 ring-mat"
+                  />
+                  <p className="flex items-baseline gap-3">
+                    <span className="font-folio text-xs text-mat-text">{String(index + 1).padStart(2, "0")}</span>
+                    <span className="font-display text-lg font-bold tracking-wide uppercase [font-stretch:75%]">
+                      {step.status}
+                    </span>
+                  </p>
+                  <p className="max-w-xl text-sm leading-relaxed text-mat-text">{step.description}</p>
                 </li>
               ))}
             </ol>
           </div>
         </section>
 
+        <EvidenceShowcase />
+
+        {/* Módulos: etiquetas como las de los cajones de refacciones. */}
+        <section id="taller" className="mx-auto max-w-6xl scroll-mt-16 px-4 py-24 sm:px-6">
+          <div className="max-w-2xl">
+            <h2 className="font-display text-3xl font-bold tracking-tight [font-stretch:112%] sm:text-4xl">
+              Todo el taller, no solo las órdenes
+            </h2>
+            <p className="mt-4 text-zinc-600">
+              Lo que pasa en el mostrador y en la bodega queda conectado con cada reparación.
+            </p>
+          </div>
+
+          <dl className="mt-14 grid gap-x-12 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+            {modules.map((module) => (
+              <div key={module.label}>
+                <dt>
+                  <span className="inline-block rounded-sm border border-zinc-300 bg-zinc-50 px-2.5 py-1 font-display text-sm font-bold tracking-[0.14em] text-zinc-800 uppercase [font-stretch:75%]">
+                    {module.label}
+                  </span>
+                </dt>
+                <dd className="mt-3 leading-relaxed text-zinc-600">{module.description}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+
+        {/* Roles: la misma orden vista por cada rol del sistema. */}
+        <section id="roles" className="scroll-mt-16 border-t border-zinc-200 bg-zinc-50">
+          <div className="mx-auto grid max-w-6xl gap-12 px-4 py-24 sm:px-6 lg:grid-cols-[1fr_1.5fr] lg:gap-16">
+            <div>
+              <h2 className="font-display text-3xl font-bold tracking-tight [font-stretch:112%] sm:text-4xl">
+                Cada quien ve lo suyo
+              </h2>
+              <p className="mt-4 leading-relaxed text-zinc-600">
+                Los permisos siguen el rol de cada persona. Tu técnico repara sin ver lo que se cobra, y la caja
+                queda en manos de quien la opera.
+              </p>
+              <p className="mt-4 text-sm leading-relaxed text-zinc-500">
+                ¿Tu taller se organiza distinto? Arma roles a la medida con los permisos que necesites.
+              </p>
+            </div>
+            <RolePreview />
+          </div>
+        </section>
+
         {/* Preguntas */}
-        <section id="preguntas" className="mx-auto max-w-3xl scroll-mt-16 px-6 py-24">
-          <h2 className="text-3xl font-semibold tracking-tight">Preguntas frecuentes</h2>
-          <FaqAccordion items={faqs} />
+        <section id="preguntas" className="scroll-mt-16 border-t border-zinc-200">
+          <div className="mx-auto max-w-3xl px-4 py-24 sm:px-6">
+            <h2 className="font-display text-3xl font-bold tracking-tight [font-stretch:112%] sm:text-4xl">
+              Preguntas frecuentes
+            </h2>
+            <FaqAccordion items={faqs} />
+          </div>
         </section>
 
         {/* Contacto */}
-        <section id="contacto" className="scroll-mt-16 border-t border-zinc-100 bg-zinc-50/60">
-          <div className="mx-auto grid max-w-6xl gap-12 px-6 py-24 lg:grid-cols-[1fr_1.4fr]">
+        <section id="contacto" className="scroll-mt-16 border-t border-zinc-200 bg-zinc-50">
+          <div className="mx-auto grid max-w-6xl gap-12 px-4 py-24 sm:px-6 lg:grid-cols-[1fr_1.4fr]">
             <div>
-              <h2 className="text-3xl font-semibold tracking-tight">¿Te interesa CellFix?</h2>
-              <p className="mt-4 text-zinc-600">
-                Cuéntanos sobre tu taller y te daremos acceso anticipado con acompañamiento para
-                configurarlo.
+              <h2 className="font-display text-3xl font-bold tracking-tight [font-stretch:112%] sm:text-4xl">
+                Aparta tu lugar
+              </h2>
+              <p className="mt-4 leading-relaxed text-zinc-600">
+                Cuéntanos sobre tu taller. Te damos acceso anticipado y te acompañamos a dar de alta tu
+                inventario, tu equipo y tus primeras órdenes.
               </p>
             </div>
             <div className="rounded-2xl border border-zinc-200 bg-white p-6 sm:p-8">
@@ -208,12 +290,12 @@ export default function Home() {
         </section>
       </main>
 
-      <footer className="border-t border-zinc-100">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-6 py-8 text-sm text-zinc-500 sm:flex-row">
+      <footer className="border-t border-zinc-200">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-4 py-8 text-sm text-zinc-500 sm:flex-row sm:px-6">
           <p>© {new Date().getFullYear()} CellFix</p>
-          <p>Gestión de órdenes para talleres de reparación.</p>
+          <p>Sistema para talleres de reparación.</p>
         </div>
       </footer>
-    </>
+    </div>
   );
 }
