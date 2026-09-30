@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { StatusBadge } from "@/components/admin/status-badge";
 import { getTenant } from "@/lib/admin/tenants";
+import { MODULES } from "@/lib/modules";
 import { SYSTEM_ROLES, SYSTEM_ROLE_KEYS } from "@/lib/permissions";
 
 const dateFormatter = new Intl.DateTimeFormat("es", { dateStyle: "long" });
@@ -87,6 +88,13 @@ export default async function TenantOverviewPage(props: PageProps<"/admin/tenant
           Los usuarios de este taller inician sesión en <span className="font-mono text-zinc-900">/login</span>{" "}
           con su correo y contraseña; ven y hacen solo lo que permiten sus roles. Dado de alta el{" "}
           {dateFormatter.format(tenant.createdAt)}.
+        </p>
+        <p className="mt-2 text-sm text-zinc-600">
+          Módulos opcionales:{" "}
+          {tenant.modules.length > 0 ? tenant.modules.map((key) => MODULES[key].label).join(", ") : "ninguno"} ·{" "}
+          <Link href={`${base}/modules`} className="font-medium text-zinc-900 hover:underline">
+            Cambiar
+          </Link>
         </p>
       </div>
     </div>

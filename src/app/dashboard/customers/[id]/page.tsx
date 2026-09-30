@@ -14,6 +14,7 @@ import { setCustomerActiveAction } from "@/lib/customers/actions";
 import { getCustomer } from "@/lib/customers/core";
 import { cfdiUseLabel, taxRegimeLabel } from "@/lib/customers/sat";
 import { formatMoney } from "@/lib/inventory/format";
+import { hasModule } from "@/lib/modules";
 
 export const metadata: Metadata = {
   title: "Cliente — CellFix",
@@ -34,6 +35,8 @@ export default async function CustomerPage(props: PageProps<"/dashboard/customer
   const canSeeSales = session.permissions.includes("sales.create") || session.permissions.includes("cash.view");
   const canSeeOrders = ORDER_ACCESS_PERMISSIONS.some((permission) => session.permissions.includes(permission));
   const canSeeOrderAmounts = canSeeOrderPrices(session.permissions);
+  // Sin el módulo de Caja no hay ventas de mostrador que mostrar.
+  const hasCash = hasModule(session.modules, "cash");
   const { id } = await props.params;
 
   const [data, orders] = await Promise.all([
@@ -167,47 +170,49 @@ export default async function CustomerPage(props: PageProps<"/dashboard/customer
         </section>
       )}
 
-      <section className="mt-10">
-        <h2 className="text-lg font-semibold tracking-tight">Historial de compras</h2>
-        {sales.length === 0 ? (
-          <div className="mt-4 rounded-2xl border border-dashed border-zinc-300 bg-white px-6 py-10 text-center">
-            <p className="text-sm text-zinc-500">Aún no tiene compras.</p>
-          </div>
-        ) : (
-          <div className="mt-4 overflow-x-auto rounded-2xl border border-zinc-200 bg-white">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-zinc-200 text-xs tracking-wide text-zinc-500 uppercase">
-                <tr>
-                  <th className="px-5 py-3 font-medium">Folio</th>
-                  <th className="px-5 py-3 font-medium">Fecha</th>
-                  <th className="px-5 py-3 font-medium">Estado</th>
-                  <th className="px-5 py-3 text-right font-medium">Total</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100">
-                {sales.map((sale) => (
-                  <tr key={sale.id}>
-                    <td className="px-5 py-3">
-                      {canSeeSales ? (
-                        <Link href={`/dashboard/cash/sales/${sale.id}`} className="font-medium text-zinc-900 hover:underline">
-                          #{sale.folio}
-                        </Link>
-                      ) : (
-                        <span className="font-medium text-zinc-900">#{sale.folio}</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3 whitespace-nowrap text-zinc-600">{dateTimeFormatter.format(sale.createdAt)}</td>
-                    <td className="px-5 py-3">
-                      <SaleStatusBadge total={sale.total} refundedTotal={sale.refundedTotal} />
-                    </td>
-                    <td className="px-5 py-3 text-right font-medium whitespace-nowrap tabular-nums">{formatMoney(sale.total)}</td>
+      {hasCash && (
+        <section className="mt-10">
+          <h2 className="text-lg font-semibold tracking-tight">Historial de compras</h2>
+          {sales.length === 0 ? (
+            <div className="mt-4 rounded-2xl border border-dashed border-zinc-300 bg-white px-6 py-10 text-center">
+              <p className="text-sm text-zinc-500">Aún no tiene compras.</p>
+            </div>
+          ) : (
+            <div className="mt-4 overflow-x-auto rounded-2xl border border-zinc-200 bg-white">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b border-zinc-200 text-xs tracking-wide text-zinc-500 uppercase">
+                  <tr>
+                    <th className="px-5 py-3 font-medium">Folio</th>
+                    <th className="px-5 py-3 font-medium">Fecha</th>
+                    <th className="px-5 py-3 font-medium">Estado</th>
+                    <th className="px-5 py-3 text-right font-medium">Total</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+                </thead>
+                <tbody className="divide-y divide-zinc-100">
+                  {sales.map((sale) => (
+                    <tr key={sale.id}>
+                      <td className="px-5 py-3">
+                        {canSeeSales ? (
+                          <Link href={`/dashboard/cash/sales/${sale.id}`} className="font-medium text-zinc-900 hover:underline">
+                            #{sale.folio}
+                          </Link>
+                        ) : (
+                          <span className="font-medium text-zinc-900">#{sale.folio}</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 whitespace-nowrap text-zinc-600">{dateTimeFormatter.format(sale.createdAt)}</td>
+                      <td className="px-5 py-3">
+                        <SaleStatusBadge total={sale.total} refundedTotal={sale.refundedTotal} />
+                      </td>
+                      <td className="px-5 py-3 text-right font-medium whitespace-nowrap tabular-nums">{formatMoney(sale.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
     </>
   );
 }

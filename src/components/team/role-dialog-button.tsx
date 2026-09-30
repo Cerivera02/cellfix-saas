@@ -15,6 +15,7 @@ export function RoleDialogButton({
   action,
   defaults,
   disabledPermissions,
+  hiddenPermissions,
   submitLabel,
 }: {
   label: string;
@@ -24,6 +25,7 @@ export function RoleDialogButton({
   action: (state: FormState, formData: FormData) => Promise<FormState>;
   defaults?: CustomRoleDefaults;
   disabledPermissions: Permission[];
+  hiddenPermissions: Permission[];
   submitLabel: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -53,6 +55,7 @@ export function RoleDialogButton({
           action={action}
           defaults={defaults}
           disabledPermissions={disabledPermissions}
+          hiddenPermissions={hiddenPermissions}
           submitLabel={submitLabel}
           onSuccess={() => setOpen(false)}
           onCancel={() => setOpen(false)}

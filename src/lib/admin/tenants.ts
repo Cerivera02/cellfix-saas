@@ -4,6 +4,7 @@ import { cache } from "react";
 import type { PoolClient } from "pg";
 import { db, isUniqueViolation, withTransaction } from "@/lib/db";
 import { hashPassword } from "@/lib/auth/password";
+import { normalizeModules, type ModuleKey } from "@/lib/modules";
 import { requirePlatformAdmin } from "@/lib/auth/session";
 import { EmailTakenError, getTeam, type Team } from "@/lib/team/core";
 import { tenantSchemaName } from "@/lib/tenancy/db";
@@ -32,6 +33,8 @@ export type TenantDetail = {
   slug: string;
   status: TenantStatus;
   createdAt: Date;
+  // Módulos opcionales activos; la base (reparaciones, clientes y equipo) siempre está activa.
+  modules: ModuleKey[];
   team: Team;
 };
 
@@ -106,10 +109,14 @@ export const getTenant = cache(async (tenantId: string): Promise<TenantDetail | 
   await requirePlatformAdmin();
   if (!UUID_PATTERN.test(tenantId)) return null;
 
-  const { rows } = await db.query<{ id: string; name: string; slug: string; status: TenantStatus; created_at: Date }>(
-    "SELECT id, name, slug, status, created_at FROM tenants WHERE id = $1",
-    [tenantId],
-  );
+  const { rows } = await db.query<{
+    id: string;
+    name: string;
+    slug: string;
+    status: TenantStatus;
+    created_at: Date;
+    modules: string[];
+  }>("SELECT id, name, slug, status, created_at, modules FROM tenants WHERE id = $1", [tenantId]);
   const tenant = rows[0];
   if (!tenant) return null;
 
@@ -119,6 +126,7 @@ export const getTenant = cache(async (tenantId: string): Promise<TenantDetail | 
     slug: tenant.slug,
     status: tenant.status,
     createdAt: tenant.created_at,
+    modules: normalizeModules(tenant.modules),
     team: await getTeam(tenant.id),
   };
 });
@@ -159,6 +167,13 @@ export async function updateTenantName(tenantId: string, name: string) {
   await requirePlatformAdmin();
   if (!UUID_PATTERN.test(tenantId)) return;
   await db.query("UPDATE tenants SET name = $1 WHERE id = $2", [name, tenantId]);
+}
+
+// Activa o apaga módulos opcionales. Apagar un módulo solo lo oculta: sus datos se conservan.
+export async function setTenantModules(tenantId: string, modules: readonly string[]) {
+  await requirePlatformAdmin();
+  if (!UUID_PATTERN.test(tenantId)) return;
+  await db.query("UPDATE tenants SET modules = $1::text[] WHERE id = $2", [normalizeModules(modules), tenantId]);
 }
 
 export async function setTenantStatus(tenantId: string, status: TenantStatus) {

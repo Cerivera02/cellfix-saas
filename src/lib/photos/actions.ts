@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { toDataURL } from "qrcode";
 import { requireAnyTenantPermission } from "@/lib/auth/session";
+import { hasModule } from "@/lib/modules";
 import { ORDER_ACCESS_PERMISSIONS } from "@/lib/orders/labels";
 import { PhotoError, createUploadSession, deletePhoto, listPhotos } from "@/lib/photos/core";
 
@@ -22,6 +23,7 @@ async function publicBaseUrl() {
 
 export async function createPhotoSessionAction(orderId: string | null): Promise<PhotoSession | { message: string }> {
   const session = await requireAnyTenantPermission(["orders.intake", "repairs.work"]);
+  if (!hasModule(session.modules, "photos")) return { message: "La evidencia fotográfica no está activa en este taller." };
 
   try {
     const upload = await createUploadSession(
@@ -45,6 +47,7 @@ export async function createPhotoSessionAction(orderId: string | null): Promise<
 
 export async function listPhotosAction(filter: { orderId: string } | { sessionIds: string[] }) {
   const session = await requireAnyTenantPermission(ORDER_ACCESS_PERMISSIONS);
+  if (!hasModule(session.modules, "photos")) return [];
   const safeFilter =
     typeof filter === "object" && filter !== null && "orderId" in filter
       ? { orderId: String(filter.orderId) }
@@ -55,6 +58,8 @@ export async function listPhotosAction(filter: { orderId: string } | { sessionId
 
 export async function deletePhotoAction(photoId: string): Promise<{ message?: string }> {
   const session = await requireAnyTenantPermission(["orders.intake", "repairs.work"]);
+  // Con el módulo apagado las fotos se conservan tal cual.
+  if (!hasModule(session.modules, "photos")) return { message: "La evidencia fotográfica no está activa en este taller." };
   try {
     await deletePhoto(session.tenant.id, String(photoId));
     return {};

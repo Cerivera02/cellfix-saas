@@ -3,8 +3,15 @@
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePlatformAdmin } from "@/lib/auth/session";
-import { createTenant, setTenantStatus, updateTenantName, type TenantStatus } from "@/lib/admin/tenants";
+import {
+  createTenant,
+  setTenantModules,
+  setTenantStatus,
+  updateTenantName,
+  type TenantStatus,
+} from "@/lib/admin/tenants";
 import type { FormState } from "@/lib/form-state";
+import { MODULES, MODULE_KEYS, isModuleKey } from "@/lib/modules";
 import { EmailTakenError, PLATFORM_ACTOR } from "@/lib/team/core";
 import {
   addMemberFromForm,
@@ -84,6 +91,36 @@ export async function setTenantStatusAction(tenantId: string, status: TenantStat
 
   await setTenantStatus(tenantId, status);
   refresh();
+}
+
+export async function setTenantModulesAction(
+  tenantId: string,
+  _prevState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  await requirePlatformAdmin();
+
+  const selected = formData.getAll("modules").filter((value): value is string => typeof value === "string" && isModuleKey(value));
+  const selections = { modules: selected };
+
+  // Un módulo con requisitos (Compras necesita Inventario) no se activa solo.
+  const missing = MODULE_KEYS.find(
+    (key) => selected.includes(key) && MODULES[key].requires.some((required) => !selected.includes(required)),
+  );
+  if (missing) {
+    const required = MODULES[missing].requires.map((key) => MODULES[key].label).join(" y ");
+    return { selections, message: `${MODULES[missing].label} requiere ${required}.` };
+  }
+
+  try {
+    await setTenantModules(tenantId, selected);
+  } catch (error) {
+    console.error("Error al actualizar los módulos del taller:", error);
+    return { selections, message: "No pudimos guardar los módulos." };
+  }
+
+  refresh();
+  return { success: "Módulos actualizados." };
 }
 
 export async function addMemberAction(tenantId: string, _prevState: FormState, formData: FormData): Promise<FormState> {

@@ -13,6 +13,7 @@ export function CustomRoleForm({
   action,
   defaults,
   disabledPermissions,
+  hiddenPermissions,
   submitLabel,
   onSuccess,
   onCancel,
@@ -20,6 +21,7 @@ export function CustomRoleForm({
   action: (state: FormState, formData: FormData) => Promise<FormState>;
   defaults?: CustomRoleDefaults;
   disabledPermissions: Permission[];
+  hiddenPermissions: Permission[];
   submitLabel: string;
   onSuccess: () => void;
   onCancel: () => void;
@@ -61,6 +63,7 @@ export function CustomRoleForm({
       <PermissionPicker
         selected={state?.selections?.permissions ?? defaults?.permissions ?? []}
         disabled={disabledPermissions}
+        hidden={hiddenPermissions}
         error={state?.errors?.permissions}
       />
 

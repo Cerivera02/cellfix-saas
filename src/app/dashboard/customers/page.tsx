@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { requireAnyTenantPermission } from "@/lib/auth/session";
 import { CUSTOMER_ACCESS_PERMISSIONS } from "@/lib/customers/access";
 import { listCustomers } from "@/lib/customers/core";
+import { hasModule } from "@/lib/modules";
 
 export const metadata: Metadata = {
   title: "Clientes — CellFix",
@@ -18,6 +19,9 @@ export default async function CustomersPage(props: PageProps<"/dashboard/custome
   const canCreate = (["customers.manage", "sales.create", "orders.intake"] as const).some((permission) =>
     session.permissions.includes(permission),
   );
+
+  // Sin el módulo de Caja no hay ventas de mostrador: se ocultan las compras.
+  const hasCash = hasModule(session.modules, "cash");
 
   const searchParams = await props.searchParams;
   const search = typeof searchParams.q === "string" ? searchParams.q.trim().slice(0, 100) : "";
@@ -36,7 +40,11 @@ export default async function CustomersPage(props: PageProps<"/dashboard/custome
     <>
       <PageHeader
         title="Clientes"
-        description="Personas a las que se les vende o repara; su historial sirve para garantías."
+        description={
+          hasCash
+            ? "Personas a las que se les vende o repara; su historial sirve para garantías."
+            : "Personas a las que se les repara; su historial sirve para garantías."
+        }
         actions={
           canCreate && (
             <Link href="/dashboard/customers/new" className={primaryButtonClass}>
@@ -87,7 +95,11 @@ export default async function CustomersPage(props: PageProps<"/dashboard/custome
         <div className="mt-6 rounded-2xl border border-dashed border-zinc-300 bg-white px-6 py-16 text-center">
           <p className="font-medium">{search ? "Sin resultados" : archived ? "No hay clientes archivados" : "Aún no hay clientes"}</p>
           <p className="mt-1 text-sm text-zinc-500">
-            {search ? "Prueba con otro nombre, teléfono o RFC." : "Se registran aquí o al cobrar en la caja."}
+            {search
+              ? "Prueba con otro nombre, teléfono o RFC."
+              : hasCash
+                ? "Se registran aquí o al cobrar en la caja."
+                : "Se registran aquí o al recibir un equipo."}
           </p>
         </div>
       ) : (
@@ -98,7 +110,7 @@ export default async function CustomersPage(props: PageProps<"/dashboard/custome
                 <th className="px-5 py-3 font-medium">Cliente</th>
                 <th className="px-5 py-3 font-medium">Teléfono</th>
                 <th className="px-5 py-3 font-medium">RFC</th>
-                <th className="px-5 py-3 font-medium">Compras</th>
+                {hasCash && <th className="px-5 py-3 font-medium">Compras</th>}
                 <th className="px-5 py-3">
                   <span className="sr-only">Ver</span>
                 </th>
@@ -118,18 +130,20 @@ export default async function CustomersPage(props: PageProps<"/dashboard/custome
                   </td>
                   <td className="px-5 py-3.5 whitespace-nowrap text-zinc-700 tabular-nums">{customer.phone || "—"}</td>
                   <td className="px-5 py-3.5 font-mono text-xs text-zinc-600">{customer.taxId ?? "—"}</td>
-                  <td className="px-5 py-3.5 text-zinc-700">
-                    {customer.salesCount === 0 ? (
-                      <span className="text-zinc-400">Sin compras</span>
-                    ) : (
-                      <>
-                        <p className="tabular-nums">{customer.salesCount}</p>
-                        {customer.lastSaleAt && (
-                          <p className="text-xs text-zinc-500">Última: {dateFormatter.format(customer.lastSaleAt)}</p>
-                        )}
-                      </>
-                    )}
-                  </td>
+                  {hasCash && (
+                    <td className="px-5 py-3.5 text-zinc-700">
+                      {customer.salesCount === 0 ? (
+                        <span className="text-zinc-400">Sin compras</span>
+                      ) : (
+                        <>
+                          <p className="tabular-nums">{customer.salesCount}</p>
+                          {customer.lastSaleAt && (
+                            <p className="text-xs text-zinc-500">Última: {dateFormatter.format(customer.lastSaleAt)}</p>
+                          )}
+                        </>
+                      )}
+                    </td>
+                  )}
                   <td className="px-5 py-3.5 text-right text-lg text-zinc-300 transition group-hover:text-zinc-900">
                     <span aria-hidden="true">›</span>
                   </td>

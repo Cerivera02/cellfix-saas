@@ -1,4 +1,5 @@
 import type { Session } from "@/lib/auth/session";
+import { blockedPermissions } from "@/lib/modules";
 import { ALL_PERMISSIONS, SYSTEM_ROLES, SYSTEM_ROLE_KEYS, type Permission } from "@/lib/permissions";
 import type { Team, TeamActor, TeamMember } from "@/lib/team/core";
 
@@ -8,8 +9,19 @@ export type RoleOption = { value: string; label: string; description: string; di
 
 export type RoleOptions = { system: RoleOption[]; custom: RoleOption[] };
 
+// Los permisos de módulos apagados se quitan de la sesión, pero siguen en los roles del usuario.
+// Se cuentan de nuevo para decidir qué puede otorgar: así un encargado puede asignar Recepción
+// con la Caja apagada, sin llegar a otorgar permisos que sus roles nunca le dieron.
 export function actorFromSession(session: Extract<Session, { kind: "tenant" }>): TeamActor {
-  return { kind: "member", userId: session.user.id, isOwner: session.isOwner, permissions: session.permissions };
+  const blocked = blockedPermissions(session.modules).filter((permission) =>
+    session.rolePermissions.includes(permission),
+  );
+  return {
+    kind: "member",
+    userId: session.user.id,
+    isOwner: session.isOwner,
+    permissions: [...session.permissions, ...blocked],
+  };
 }
 
 // null = sin restricciones (administrador de la plataforma o propietario).

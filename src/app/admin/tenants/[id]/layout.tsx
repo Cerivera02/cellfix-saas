@@ -11,7 +11,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: `${tenant?.name ?? "Taller"} — Panel administrativo — CellFix` };
 }
 
-// Encabezado y pestañas compartidos por Resumen, Usuarios y Configuración.
+// Encabezado y pestañas compartidos por Resumen, Usuarios, Roles, Módulos y Configuración.
 export default async function TenantLayout({ children, params }: LayoutProps<"/admin/tenants/[id]">) {
   const { id } = await params;
   const tenant = await getTenant(id);

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { MobileUploader } from "@/components/photos/mobile-uploader";
+import { hasModule } from "@/lib/modules";
 import { getActiveTenantName, getUploadSession } from "@/lib/photos/core";
+import { getActiveTenantModules } from "@/lib/tenancy/modules";
 
 export const metadata: Metadata = {
   title: "Evidencia fotográfica — CellFix",
@@ -13,7 +15,9 @@ const timeFormatter = new Intl.DateTimeFormat("es-MX", { timeStyle: "short", tim
 // autoriza subir fotos a una sola orden y caduca.
 export default async function EvidencePage(props: PageProps<"/evidencia/[tenant]/[token]">) {
   const { tenant, token } = await props.params;
-  const tenantName = await getActiveTenantName(tenant);
+  // Con la evidencia fotográfica apagada el enlace se trata como no válido.
+  const modules = await getActiveTenantModules(tenant);
+  const tenantName = modules && hasModule(modules, "photos") ? await getActiveTenantName(tenant) : null;
   const upload = tenantName ? await getUploadSession(tenant, token) : null;
 
   return (

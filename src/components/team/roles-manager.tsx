@@ -8,10 +8,14 @@ type Action = (state: FormState, formData: FormData) => Promise<FormState>;
 
 export type CustomRoleRow = { role: CustomRole; updateAction: Action; deleteAction: Action };
 
-function PermissionChips({ permissions }: { permissions: readonly Permission[] }) {
+function PermissionChips({ permissions, hidden }: { permissions: readonly Permission[]; hidden: readonly Permission[] }) {
+  const visible = permissions.filter((permission) => !hidden.includes(permission));
+  if (visible.length === 0) {
+    return <p className="mt-3 text-xs text-zinc-500">Sin permisos en los módulos activos del taller.</p>;
+  }
   return (
     <ul className="mt-3 flex flex-wrap gap-1.5">
-      {permissions.map((permission) => (
+      {visible.map((permission) => (
         <li key={permission} className="rounded-md bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600">
           {PERMISSION_LABELS[permission]}
         </li>
@@ -26,10 +30,13 @@ export function RolesManager({
   createAction,
   rows,
   disabledPermissions,
+  hiddenPermissions,
 }: {
   createAction: Action;
   rows: CustomRoleRow[];
   disabledPermissions: Permission[];
+  // Permisos de módulos apagados en el taller: no se ofrecen ni se muestran.
+  hiddenPermissions: Permission[];
 }) {
   return (
     <div className="flex flex-col gap-12">
@@ -45,6 +52,7 @@ export function RolesManager({
             description="Elige qué podrán ver o hacer quienes tengan este rol."
             action={createAction}
             disabledPermissions={disabledPermissions}
+            hiddenPermissions={hiddenPermissions}
             submitLabel="Crear rol"
           />
         </div>
@@ -71,7 +79,7 @@ export function RolesManager({
                 </div>
 
                 <div className="mb-4">
-                  <PermissionChips permissions={role.permissions} />
+                  <PermissionChips permissions={role.permissions} hidden={hiddenPermissions} />
                 </div>
 
                 <div className="mt-auto flex items-start justify-end gap-1 border-t border-zinc-100 pt-3">
@@ -83,6 +91,7 @@ export function RolesManager({
                     action={updateAction}
                     defaults={{ name: role.name, description: role.description, permissions: role.permissions }}
                     disabledPermissions={disabledPermissions}
+                    hiddenPermissions={hiddenPermissions}
                     submitLabel="Guardar"
                   />
                   <DeleteRoleButton roleName={role.name} action={deleteAction} />
@@ -105,7 +114,7 @@ export function RolesManager({
               {key === "owner" ? (
                 <p className="mt-3 text-xs text-zinc-600">Todos los permisos</p>
               ) : (
-                <PermissionChips permissions={SYSTEM_ROLES[key].permissions} />
+                <PermissionChips permissions={SYSTEM_ROLES[key].permissions} hidden={hiddenPermissions} />
               )}
             </li>
           ))}

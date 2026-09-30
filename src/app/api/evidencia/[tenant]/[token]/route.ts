@@ -1,10 +1,14 @@
-import { MAX_PHOTO_BYTES, PhotoError, getActiveTenantName, savePhoto } from "@/lib/photos/core";
+import { hasModule } from "@/lib/modules";
+import { MAX_PHOTO_BYTES, PhotoError, savePhoto } from "@/lib/photos/core";
+import { getActiveTenantModules } from "@/lib/tenancy/modules";
 
 // Subida de una foto desde el celular. No usa sesión: la autoriza el token temporal del enlace.
 export async function POST(request: Request, ctx: RouteContext<"/api/evidencia/[tenant]/[token]">) {
   const { tenant, token } = await ctx.params;
 
-  if (!(await getActiveTenantName(tenant))) {
+  // Taller inexistente, suspendido o sin evidencia fotográfica: el enlace no vale.
+  const modules = await getActiveTenantModules(tenant);
+  if (!modules || !hasModule(modules, "photos")) {
     return Response.json({ message: "El enlace no es válido." }, { status: 404 });
   }
 
