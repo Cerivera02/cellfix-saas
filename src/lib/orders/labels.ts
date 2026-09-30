@@ -77,6 +77,27 @@ export const ORDER_OUTCOME_LABELS: Record<OrderOutcome, string> = {
   not_repaired: "Sin reparación",
 };
 
+// Tipo de ingreso al recibir el equipo: define el anticipo que se pide.
+export const INTAKE_TYPES = ["in_stock", "order_part", "diagnosis"] as const;
+
+export type IntakeType = (typeof INTAKE_TYPES)[number];
+
+export const INTAKE_TYPE_LABELS: Record<IntakeType, string> = {
+  in_stock: "Refacción en existencia",
+  order_part: "Refacción por conseguir",
+  diagnosis: "Diagnóstico",
+};
+
+export const INTAKE_TYPE_HINTS: Record<IntakeType, string> = {
+  in_stock: "Se pide anticipo para apartar la reparación.",
+  order_part: "Se sugiere un anticipo para pedir la pieza.",
+  diagnosis: "Se desconoce la falla; el diagnóstico se cobra al recibir.",
+};
+
+export function isIntakeType(value: string): value is IntakeType {
+  return (INTAKE_TYPES as readonly string[]).includes(value);
+}
+
 export type OrderPaymentKind = "deposit" | "payment" | "refund";
 
 export const ORDER_PAYMENT_KIND_LABELS: Record<OrderPaymentKind, string> = {
@@ -99,6 +120,8 @@ export const DEVICE_TYPES = [
 ];
 
 export const LABOR_TAX_RATES = ["16", "8", "0"];
+
+export const DIAGNOSIS_LINE_DESCRIPTION = "Diagnóstico";
 
 // Desbloqueo del equipo. El patrón se guarda como la secuencia de puntos de una cuadrícula 3×3,
 // numerados de izquierda a derecha y de arriba abajo: "1-5-9-6".
