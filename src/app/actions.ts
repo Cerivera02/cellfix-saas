@@ -44,7 +44,7 @@ export async function submitLead(
     console.error("Faltan variables de entorno de Resend (RESEND_API_KEY, RESEND_FROM_EMAIL, CONTACT_TO_EMAIL).");
     return {
       status: "error",
-      message: "No pudimos enviar tu solicitud. Inténtalo más tarde.",
+      message: "No pudimos enviar tu mensaje. Inténtalo más tarde.",
       fields,
     };
   }
@@ -54,7 +54,7 @@ export async function submitLead(
     from,
     to,
     replyTo: fields.email,
-    subject: `Nuevo interesado: ${fields.business}`,
+    subject: `Mensaje desde la landing: ${fields.business}`,
     text: [
       `Nombre: ${fields.name}`,
       `Correo: ${fields.email}`,
@@ -70,7 +70,7 @@ export async function submitLead(
     console.error("Error de Resend:", error);
     return {
       status: "error",
-      message: "No pudimos enviar tu solicitud. Inténtalo más tarde.",
+      message: "No pudimos enviar tu mensaje. Inténtalo más tarde.",
       fields,
     };
   }

@@ -72,7 +72,7 @@ export function LeadForm() {
       </Field>
 
       <div className="sm:col-span-2">
-        <Field label="¿Qué necesitas? (opcional)" name="message">
+        <Field label="Tu pregunta (opcional)" name="message">
           <textarea
             id="message"
             name="message"
@@ -98,14 +98,14 @@ export function LeadForm() {
           aria-live="polite"
           className={`text-sm ${state.status === "error" ? "text-red-600" : "text-zinc-500"}`}
         >
-          {state.status === "error" ? state.message : "Sin compromiso. Solo te escribiremos una vez."}
+          {state.status === "error" ? state.message : "Te respondemos a tu correo."}
         </p>
         <button
           type="submit"
           disabled={pending}
           className="rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {pending ? "Enviando…" : "Solicitar acceso"}
+          {pending ? "Enviando…" : "Enviar mensaje"}
         </button>
       </div>
     </form>
