@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { SESSION_COOKIE } from "@/lib/auth/constants";
+import { filterPermissionsByModules, normalizeModules, type ModuleKey } from "@/lib/modules";
 import {
   SYSTEM_ROLES,
   SYSTEM_ROLE_KEYS,
@@ -24,6 +25,10 @@ export type Session =
       kind: "tenant";
       user: SessionUser;
       tenant: { id: string; name: string; slug: string };
+      // Módulos opcionales activos del taller. Los permisos ya vienen filtrados por ellos.
+      modules: ModuleKey[];
+      // Permisos de sus roles sin filtrar por módulos. Solo para decidir qué puede otorgar.
+      rolePermissions: Permission[];
       isOwner: boolean;
       roleNames: string[];
       permissions: Permission[];
@@ -37,6 +42,7 @@ type SessionRow = {
   session_tenant_id: string | null;
   tenant_name: string | null;
   tenant_slug: string | null;
+  tenant_modules: string[] | null;
   is_member: boolean;
   system_roles: string[] | null;
   custom_role_names: string[] | null;
@@ -77,7 +83,7 @@ export const getSession = cache(async (): Promise<Session | null> => {
 
   const { rows } = await db.query<SessionRow>(
     `SELECT u.id AS user_id, u.name AS user_name, u.email, u.is_platform_admin,
-            s.tenant_id AS session_tenant_id, t.name AS tenant_name, t.slug AS tenant_slug,
+            s.tenant_id AS session_tenant_id, t.name AS tenant_name, t.slug AS tenant_slug, t.modules AS tenant_modules,
             m.user_id IS NOT NULL AS is_member,
             r.system_roles, r.custom_role_names, r.custom_permissions
        FROM sessions s
@@ -107,16 +113,20 @@ export const getSession = cache(async (): Promise<Session | null> => {
     if (!row.is_member || !row.tenant_name || !row.tenant_slug) return null;
 
     const systemRoles = SYSTEM_ROLE_KEYS.filter((role) => row.system_roles?.includes(role));
+    const modules = normalizeModules(row.tenant_modules ?? []);
+    const rolePermissions = resolvePermissions(systemRoles, row.custom_permissions ?? []);
     return {
       kind: "tenant",
       user,
       tenant: { id: row.session_tenant_id, name: row.tenant_name, slug: row.tenant_slug },
+      modules,
       isOwner: systemRoles.includes("owner"),
       roleNames: [
         ...systemRoles.map((role) => SYSTEM_ROLES[role].label),
         ...(row.custom_role_names ?? []).sort((a, b) => a.localeCompare(b, "es")),
       ],
-      permissions: resolvePermissions(systemRoles, row.custom_permissions ?? []),
+      rolePermissions,
+      permissions: filterPermissionsByModules(rolePermissions, modules),
     };
   }
 
