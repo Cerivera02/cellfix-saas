@@ -13,7 +13,7 @@ import type { FormState } from "@/lib/form-state";
 import { InventoryError } from "@/lib/inventory/core";
 import {
   OrderError,
-  addLabor,
+  addFreeLine,
   addOrderPayment,
   addPart,
   cancelOrder,
@@ -28,7 +28,7 @@ import {
   updateDiagnosis,
   updateOrder,
 } from "@/lib/orders/core";
-import { parseOrderForm } from "@/lib/orders/form";
+import { parseIntakeForm, parseOrderForm } from "@/lib/orders/form";
 import {
   LABOR_TAX_RATES,
   ORDER_ACCESS_PERMISSIONS,
@@ -36,6 +36,7 @@ import {
   isOrderStatus,
   type OrderOutcome,
 } from "@/lib/orders/labels";
+import { hasModule, type ModuleKey } from "@/lib/modules";
 import type { Permission } from "@/lib/permissions";
 import { UUID_PATTERN, readField } from "@/lib/validation";
 
@@ -52,7 +53,15 @@ function knownMessage(error: unknown) {
   return null;
 }
 
-function toErrorState(error: unknown, context: { fields?: Record<string, string> } = {}): FormState {
+// Sin el módulo de Caja los cobros de órdenes se registran sin turno.
+function cashOptions(session: { modules: readonly ModuleKey[] }) {
+  return { useCashShift: hasModule(session.modules, "cash") };
+}
+
+function toErrorState(
+  error: unknown,
+  context: { fields?: Record<string, string>; selections?: Record<string, string[]> } = {},
+): FormState {
   return { ...context, message: knownMessage(error) ?? "No pudimos guardar los cambios. Inténtalo de nuevo." };
 }
 
@@ -63,18 +72,30 @@ export type ChargeResult = { message?: string; success?: string };
 // ---------------------------------------------------------------------------
 
 export async function createOrderAction(_prevState: FormState, formData: FormData): Promise<FormState> {
-  const { tenantId, actor } = await authorize("orders.intake");
-  const { input, context, errors } = parseOrderForm(formData);
-  if (errors) return { ...context, errors };
+  const { session, tenantId, actor } = await authorize("orders.intake");
+  const { input, context: orderContext, errors: orderErrors } = parseOrderForm(formData);
+  // Sin permiso para cobrar, la orden se registra sin anticipo ni pago del diagnóstico.
+  // La refacción se elige del inventario si el taller tiene el módulo; si no, se captura a mano.
+  const intakeForm = parseIntakeForm(formData, {
+    canCollect: session.permissions.includes("payments.collect"),
+    canSeePrices: canSeeOrderPrices(session.permissions),
+    hasInventory: hasModule(session.modules, "inventory"),
+  });
+  const context = { fields: { ...orderContext.fields, ...intakeForm.fields }, selections: intakeForm.selections };
+  if (orderErrors || intakeForm.errors) return { ...context, errors: { ...orderErrors, ...intakeForm.errors } };
+  if (intakeForm.message) return { ...context, message: intakeForm.message };
 
-  const photoSessionIds = formData
+  // Sin el módulo de fotos no se ligan enlaces de evidencia.
+  const photoSessionIds = !hasModule(session.modules, "photos") ? [] : formData
     .getAll("photoSessionId")
     .filter((value): value is string => typeof value === "string" && UUID_PATTERN.test(value))
     .slice(0, 20);
 
   let orderId: string;
   try {
-    orderId = (await createOrder(tenantId, actor, input, { photoSessionIds })).id;
+    orderId = (
+      await createOrder(tenantId, actor, input, intakeForm.intake, { photoSessionIds, cash: cashOptions(session) })
+    ).id;
   } catch (error) {
     return toErrorState(error, context);
   }
@@ -182,9 +203,11 @@ export async function changeStatusAction(orderId: string, _prevState: FormState,
 
 export type RepairItemOption = { id: string; name: string; trackStock: boolean; stock: number; price: string | null };
 
-// Sin permiso para ver precios (técnicos) no se envía ningún importe al navegador.
+// Sin permiso para ver precios (técnicos) no se envía ningún importe al navegador. Lo usan el
+// técnico al agregar refacciones y recepción al elegir la refacción en existencia.
 export async function searchRepairItemsAction(query: string): Promise<RepairItemOption[]> {
-  const { session, tenantId } = await authorize("repairs.work");
+  const { session, tenantId } = await authorize("repairs.work", "orders.intake");
+  if (!hasModule(session.modules, "inventory")) return [];
   const showPrices = canSeeOrderPrices(session.permissions);
   const items = await searchRepairItems(tenantId, typeof query === "string" ? query : "");
 
@@ -209,9 +232,14 @@ export async function searchRepairItemsAction(query: string): Promise<RepairItem
 export async function addPartAction(orderId: string, _prevState: FormState, formData: FormData): Promise<FormState> {
   const { session, tenantId, actor } = await authorize("repairs.work");
   const fields = { itemId: readField(formData, "itemId", 36), quantity: readField(formData, "quantity", 6) };
+  if (!hasModule(session.modules, "inventory")) {
+    return { fields, message: "El inventario no está activo; captura la refacción a mano." };
+  }
   const errors: Record<string, string> = {};
   if (!fields.itemId) errors.itemId = "Busca y elige la refacción.";
-  if (!/^\d{1,4}$/.test(fields.quantity) || Number(fields.quantity) < 1) errors.quantity = "Escribe una cantidad válida.";
+  if (!/^\d{1,4}$/.test(fields.quantity) || Number(fields.quantity) < 1 || Number(fields.quantity) > 1000) {
+    errors.quantity = "Escribe una cantidad entre 1 y 1000.";
+  }
   if (Object.keys(errors).length > 0) return { fields, errors };
 
   try {
@@ -248,11 +276,18 @@ export async function addLaborAction(orderId: string, _prevState: FormState, for
   if (Object.keys(errors).length > 0) return { ...context, errors };
 
   try {
-    await addLabor(
+    await addFreeLine(
       tenantId,
       actor,
       orderId,
-      { description: fields.description, priceCents: priceCents ?? 0, taxRate: Number(fields.taxRate), taxIncluded },
+      "labor",
+      {
+        description: fields.description,
+        quantity: 1,
+        priceCents: priceCents ?? 0,
+        taxRate: Number(fields.taxRate),
+        taxIncluded,
+      },
       { override: true },
     );
   } catch (error) {
@@ -263,12 +298,64 @@ export async function addLaborAction(orderId: string, _prevState: FormState, for
   return { success: "Mano de obra agregada." };
 }
 
+// Refacción capturada a mano, para talleres sin el módulo de Inventario. La agrega el técnico
+// de la orden; quien no ve precios la registra sin importe.
+export async function addFreePartAction(orderId: string, _prevState: FormState, formData: FormData): Promise<FormState> {
+  const { session, tenantId, actor } = await authorize("repairs.work");
+  const showPrices = canSeeOrderPrices(session.permissions);
+  const fields = {
+    description: readField(formData, "description", 150),
+    quantity: readField(formData, "quantity", 6),
+    price: showPrices ? readField(formData, "price", 20) : "",
+    taxRate: showPrices ? readField(formData, "taxRate", 3) : "16",
+  };
+  const taxIncluded = showPrices ? formData.get("taxIncluded") === "on" : true;
+  const context = { fields, selections: { taxIncluded: taxIncluded ? ["on"] : [] } };
+  const errors: Record<string, string> = {};
+  if (!fields.description) errors.description = "Describe la refacción, por ejemplo “Pantalla iPhone 11”.";
+  if (!/^\d{1,4}$/.test(fields.quantity) || Number(fields.quantity) < 1 || Number(fields.quantity) > 1000) {
+    errors.quantity = "Escribe una cantidad entre 1 y 1000.";
+  }
+  const priceCents = showPrices ? parseMoneyCents(fields.price) : 0;
+  if (priceCents === null) errors.price = "Usa un importe como 350 o 350.50.";
+  if (!LABOR_TAX_RATES.includes(fields.taxRate)) errors.taxRate = "Elige el IVA.";
+  if (Object.keys(errors).length > 0) return { ...context, errors };
+
+  try {
+    await addFreeLine(
+      tenantId,
+      actor,
+      orderId,
+      "part",
+      {
+        description: fields.description,
+        quantity: Number(fields.quantity),
+        priceCents: priceCents ?? 0,
+        taxRate: Number(fields.taxRate),
+        taxIncluded,
+      },
+      { override: session.isOwner },
+    );
+  } catch (error) {
+    return { ...context, message: knownMessage(error) ?? "No pudimos guardar los cambios. Inténtalo de nuevo." };
+  }
+
+  refresh();
+  return { success: "Refacción agregada." };
+}
+
 export async function removeLineAction(orderId: string, lineId: string): Promise<FormState> {
-  const { session, tenantId, actor } = await authorize("repairs.work", "orders.prices", "payments.collect");
+  const { session, tenantId, actor } = await authorize(
+    "repairs.work",
+    "orders.prices",
+    "payments.collect",
+    "orders.intake",
+  );
   try {
     await removeLine(tenantId, actor, orderId, lineId, {
       override: session.isOwner,
       allowLabor: canSeeOrderPrices(session.permissions),
+      allowIntakeFix: session.permissions.includes("orders.intake"),
     });
   } catch (error) {
     return toErrorState(error);
@@ -297,12 +384,12 @@ export async function releaseOrderAction(orderId: string, _prevState: FormState,
 // ---------------------------------------------------------------------------
 
 export async function addOrderPaymentAction(orderId: string, request: ChargeRequest): Promise<ChargeResult> {
-  const { tenantId, actor } = await authorize("payments.collect");
+  const { session, tenantId, actor } = await authorize("payments.collect");
   const parsed = parseChargeRequest(request);
   if ("message" in parsed) return parsed;
 
   try {
-    await addOrderPayment(tenantId, actor, orderId, parsed);
+    await addOrderPayment(tenantId, actor, orderId, parsed, cashOptions(session));
   } catch (error) {
     return { message: knownMessage(error) ?? "No pudimos registrar el cobro. Inténtalo de nuevo." };
   }
@@ -311,13 +398,20 @@ export async function addOrderPaymentAction(orderId: string, request: ChargeRequ
   return { success: "Cobro registrado." };
 }
 
+// `expectedTotal`: total de la orden que mostró la página (se liga al renderizarla).
 export async function deliverOrderAction(
   orderId: string,
-  request: ChargeRequest & { refundMethod: string | null },
+  expectedTotal: string,
+  request: ChargeRequest & { refundMethod: string | null; warrantyId: string | null },
 ): Promise<ChargeResult> {
   const { session, tenantId, actor } = await authorize("orders.deliver");
   const parsed = parseChargeRequest(request);
   if ("message" in parsed) return parsed;
+  const expectedTotalCents = parseMoneyCents(String(expectedTotal ?? ""));
+
+  // Que la garantía exista y esté activa se verifica al entregar, dentro de la transacción.
+  const warrantyId = request?.warrantyId ? String(request.warrantyId) : null;
+  if (warrantyId !== null && !UUID_PATTERN.test(warrantyId)) return { message: "Garantía no válida." };
 
   const refundMethod = request?.refundMethod ? String(request.refundMethod) : null;
   if (refundMethod !== null && !isPaymentMethod(refundMethod)) return { message: "Método de reembolso no válido." };
@@ -326,7 +420,7 @@ export async function deliverOrderAction(
   }
 
   try {
-    await deliverOrder(tenantId, actor, orderId, { ...parsed, refundMethod });
+    await deliverOrder(tenantId, actor, orderId, { ...parsed, refundMethod, expectedTotalCents, warrantyId }, cashOptions(session));
   } catch (error) {
     return { message: knownMessage(error) ?? "No pudimos entregar la orden. Inténtalo de nuevo." };
   }
@@ -345,7 +439,7 @@ export async function cancelOrderAction(orderId: string, _prevState: FormState, 
   }
 
   try {
-    await cancelOrder(tenantId, actor, orderId, { reason: fields.reason, refundMethod });
+    await cancelOrder(tenantId, actor, orderId, { reason: fields.reason, refundMethod }, cashOptions(session));
   } catch (error) {
     return toErrorState(error, { fields });
   }

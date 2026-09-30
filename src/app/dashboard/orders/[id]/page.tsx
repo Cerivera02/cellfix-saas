@@ -4,9 +4,11 @@ import { notFound } from "next/navigation";
 import { CancelOrderDialog, DeliverDialog, OrderPaymentDialog } from "@/components/orders/charge-dialogs";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
 import { UnlockValue } from "@/components/orders/unlock-view";
+import { TrackingLink } from "@/components/orders/tracking-link";
 import { PhotoEvidence } from "@/components/photos/photo-evidence";
 import {
   DiagnosisDialog,
+  FreePartDialog,
   LaborDialog,
   PartDialog,
   ReleaseDialog,
@@ -21,7 +23,9 @@ import { PAYMENT_METHOD_LABELS } from "@/lib/cash/labels";
 import { fromCents, toCents } from "@/lib/cash/money";
 import { addDays, formatDay } from "@/lib/dates";
 import { describeTax, formatMoney } from "@/lib/inventory/format";
+import { hasModule } from "@/lib/modules";
 import {
+  addFreePartAction,
   addLaborAction,
   addOrderPaymentAction,
   addPartAction,
@@ -35,11 +39,14 @@ import {
 } from "@/lib/orders/actions";
 import { getOrder, type OrderLine } from "@/lib/orders/core";
 import { listPhotos } from "@/lib/photos/core";
+import { getOrderTrackingUrl } from "@/lib/tracking/core";
+import { listWarranties } from "@/lib/warranties/core";
 import {
   ORDER_ACCESS_PERMISSIONS,
   ORDER_OUTCOME_LABELS,
   ORDER_PAYMENT_KIND_LABELS,
   ORDER_STATUS_LABELS,
+  INTAKE_TYPE_LABELS,
   canSeeOrderPrices,
   describeDevice,
   isActiveStatus,
@@ -61,6 +68,14 @@ function Detail({ label, value, mono }: { label: string; value: React.ReactNode;
 }
 
 // Precio por pieza que se cobra: en refacciones incluye la mano de obra.
+// La garantía se asigna al entregar y solo aplica si el equipo quedó reparado.
+function describeWarranty(order: { status: string; outcome: string | null; warrantyDays: number; warrantyName: string | null }) {
+  if (order.status === "cancelled") return "—";
+  if (order.status !== "delivered") return "Se asigna al entregar";
+  if (order.outcome !== "repaired" || order.warrantyDays === 0) return order.warrantyName ?? "Sin garantía";
+  return order.warrantyName ?? `${order.warrantyDays} días`;
+}
+
 function chargedUnitPrice(line: OrderLine) {
   return fromCents(toCents(line.unitPrice) + toCents(line.laborPrice));
 }
@@ -73,7 +88,15 @@ export default async function OrderPage(props: PageProps<"/dashboard/orders/[id]
 
   const order = await getOrder(session.tenant.id, id);
   if (!order) notFound();
-  const photos = await listPhotos(session.tenant.id, { orderId: order.id });
+  const hasPhotos = hasModule(session.modules, "photos");
+  // Sin inventario las refacciones se capturan a mano y no mueven existencias.
+  const hasInventory = hasModule(session.modules, "inventory");
+  const photos = hasPhotos ? await listPhotos(session.tenant.id, { orderId: order.id }) : [];
+  // Enlace público para que el cliente vea el avance; no aplica a órdenes canceladas.
+  const trackingUrl =
+    hasModule(session.modules, "tracking") && order.status !== "cancelled"
+      ? await getOrderTrackingUrl(session.tenant.id, session.tenant.slug, order.id)
+      : null;
 
   const active = isActiveStatus(order.status);
   const isTechnician = can("repairs.work") && active;
@@ -93,6 +116,12 @@ export default async function OrderPage(props: PageProps<"/dashboard/orders/[id]
           alias: account.alias,
         }))
       : [];
+  const canDeliver = order.status === "ready" && can("orders.deliver");
+  // Al entregar un equipo reparado se elige la garantía del catálogo activo.
+  const warranties =
+    canDeliver && order.outcome === "repaired"
+      ? (await listWarranties(session.tenant.id, { activeOnly: true })).map(({ id, name }) => ({ id, name }))
+      : null;
 
   const totalCents = toCents(order.total);
   const paidCents = toCents(order.paidTotal);
@@ -100,7 +129,11 @@ export default async function OrderPage(props: PageProps<"/dashboard/orders/[id]
   const mayTake =
     isTechnician && order.technicianId !== session.user.id && (order.technicianId === null || session.isOwner);
   const mayRelease = canWork && order.technicianId !== null && order.status !== "ready";
-  const canRemove = (line: OrderLine) => active && (line.kind === "part" ? canWork : canSeePrices);
+  // El diagnóstico cobrado al recibir no se quita a mano: se descuenta solo al agregar la reparación.
+  // Recepción puede corregir una refacción elegida por error mientras nadie ha tomado la orden.
+  const canFixIntake = can("orders.intake") && order.status === "received" && order.technicianId === null;
+  const canRemove = (line: OrderLine) =>
+    active && !line.isDiagnosis && (line.kind === "part" ? canWork || canFixIntake : canSeePrices);
   const showRemoveColumn = order.lines.some(canRemove);
   const warrantyUntil =
     order.deliveredAt && order.outcome === "repaired" && order.warrantyDays > 0
@@ -176,13 +209,15 @@ export default async function OrderPage(props: PageProps<"/dashboard/orders/[id]
           )}
           {canWork && <StatusDialog action={changeStatusAction.bind(null, order.id)} current={order.status} />}
           {mayRelease && <ReleaseDialog action={releaseOrderAction.bind(null, order.id)} />}
-          {order.status === "ready" && can("orders.deliver") && (
+          {canDeliver && (
             <DeliverDialog
-              action={deliverOrderAction.bind(null, order.id)}
+              action={deliverOrderAction.bind(null, order.id, order.total)}
               accounts={accounts}
               totalCents={totalCents}
               paidCents={paidCents}
               canCollect={canCollect}
+              warranties={warranties}
+              warrantySettingsHref={can("settings.manage") ? "/dashboard/settings/warranties" : null}
             />
           )}
           {canSeePrices && (
@@ -195,7 +230,14 @@ export default async function OrderPage(props: PageProps<"/dashboard/orders/[id]
               Editar
             </Link>
           )}
-          {canIntake && <CancelOrderDialog action={cancelOrderAction.bind(null, order.id)} paidTotal={order.paidTotal} />}
+          {canIntake && (
+            <CancelOrderDialog
+              action={cancelOrderAction.bind(null, order.id)}
+              paidTotal={order.paidTotal}
+              returnsToInventory={hasInventory}
+              diagnosisFee={order.diagnosisFee}
+            />
+          )}
         </div>
       </div>
 
@@ -209,7 +251,8 @@ export default async function OrderPage(props: PageProps<"/dashboard/orders/[id]
       )}
       {warrantyUntil && (
         <p className="mt-4 rounded-lg bg-zinc-100 px-4 py-3 text-sm text-zinc-700">
-          Garantía de {order.warrantyDays} días: vigente hasta el {dayDateFormatter.format(warrantyUntil)}
+          Garantía: {order.warrantyName ?? `${order.warrantyDays} días`}, vigente hasta el{" "}
+          {dayDateFormatter.format(warrantyUntil)}
           {warrantyUntil < new Date() && " (vencida)"}.
         </p>
       )}
@@ -243,6 +286,7 @@ export default async function OrderPage(props: PageProps<"/dashboard/orders/[id]
                   promisedOn: order.promisedOn ?? "",
                 }}
                 showEstimate={canSeePrices}
+                customerVisible={hasModule(session.modules, "tracking")}
               />
             )}
           </div>
@@ -250,6 +294,39 @@ export default async function OrderPage(props: PageProps<"/dashboard/orders/[id]
             <div className="sm:col-span-2">
               <Detail label="Falla reportada" value={order.reportedIssue} />
             </div>
+            {order.intakeType && (
+              <Detail
+                label="Tipo de ingreso"
+                value={
+                  order.intakeType === "diagnosis" && canSeePrices
+                    ? `${INTAKE_TYPE_LABELS.diagnosis} (${order.diagnosisFee ? formatMoney(order.diagnosisFee) : "gratis"})`
+                    : INTAKE_TYPE_LABELS[order.intakeType]
+                }
+              />
+            )}
+            {order.partsToGet.length > 0 && (
+              <div className="sm:col-span-2">
+                <Detail
+                  label="Refacciones por conseguir"
+                  value={
+                    <ul className="space-y-0.5">
+                      {order.partsToGet.map((part) => (
+                        <li key={part.id}>
+                          {part.itemId && hasInventory && can("inventory.view") ? (
+                            <Link href={`/dashboard/inventory/items/${part.itemId}`} className="hover:underline">
+                              {part.description}
+                            </Link>
+                          ) : (
+                            part.description
+                          )}
+                          <span className="text-zinc-500 tabular-nums"> × {part.quantity}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  }
+                />
+              </div>
+            )}
             <div className="sm:col-span-2">
               <Detail label="Diagnóstico" value={order.diagnosis || "Pendiente"} />
             </div>
@@ -257,28 +334,41 @@ export default async function OrderPage(props: PageProps<"/dashboard/orders/[id]
               <Detail label="Costo estimado" value={order.estimatedCost !== null ? formatMoney(order.estimatedCost) : "—"} />
             )}
             <Detail label="Fecha prometida" value={order.promisedOn ? formatDay(order.promisedOn) : "—"} />
-            <Detail label="Garantía" value={order.warrantyDays > 0 ? `${order.warrantyDays} días` : "Sin garantía"} />
+            <Detail label="Garantía" value={describeWarranty(order)} />
           </dl>
         </section>
       </div>
 
-      <section className="mt-4 rounded-2xl border border-zinc-200 bg-white p-5">
-        <h2 className="font-medium">Evidencia fotográfica</h2>
-        <div className="mt-3">
-          <PhotoEvidence
-            orderId={order.id}
-            initialPhotos={photos.map((photo) => ({ id: photo.id }))}
-            canUpload={active && (can("orders.intake") || can("repairs.work"))}
-            canDelete={active && (can("orders.intake") || can("repairs.work"))}
-          />
-        </div>
-      </section>
+      {trackingUrl && (
+        <section className="mt-4 rounded-2xl border border-zinc-200 bg-white px-5 py-4">
+          <TrackingLink url={trackingUrl} />
+        </section>
+      )}
+
+      {hasPhotos && (
+        <section className="mt-4 rounded-2xl border border-zinc-200 bg-white p-5">
+          <h2 className="font-medium">Evidencia fotográfica</h2>
+          <div className="mt-3">
+            <PhotoEvidence
+              orderId={order.id}
+              initialPhotos={photos.map((photo) => ({ id: photo.id }))}
+              canUpload={active && (can("orders.intake") || can("repairs.work"))}
+              canDelete={active && (can("orders.intake") || can("repairs.work"))}
+            />
+          </div>
+        </section>
+      )}
 
       <section className="mt-10">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold tracking-tight">{canSeePrices ? "Refacciones y mano de obra" : "Refacciones"}</h2>
           <div className="flex flex-wrap gap-2">
-            {canWork && <PartDialog action={addPartAction.bind(null, order.id)} />}
+            {canWork &&
+              (hasInventory ? (
+                <PartDialog action={addPartAction.bind(null, order.id)} />
+              ) : (
+                <FreePartDialog action={addFreePartAction.bind(null, order.id)} showPrices={canSeePrices} />
+              ))}
             {active && canSeePrices && <LaborDialog action={addLaborAction.bind(null, order.id)} />}
             {canWork && can("purchases.manage") && (
               <Link href={`/dashboard/purchases/new?orden=${order.id}`} className={secondaryButtonClass}>
@@ -326,7 +416,7 @@ export default async function OrderPage(props: PageProps<"/dashboard/orders/[id]
                         )}
                       </p>
                       <p className="text-xs text-zinc-500">
-                        {line.kind === "part" ? "Refacción" : "Mano de obra"}
+                        {line.isDiagnosis ? "Cobrado al recibir el equipo" : line.kind === "part" ? "Refacción" : "Mano de obra"}
                         {canSeePrices && line.kind === "part" && toCents(line.laborPrice) > 0 && (
                           <>
                             {" "}
@@ -356,7 +446,7 @@ export default async function OrderPage(props: PageProps<"/dashboard/orders/[id]
                             label="Quitar"
                             pendingLabel="Quitando…"
                             confirm={
-                              line.kind === "part"
+                              line.kind === "part" && line.itemId
                                 ? `¿Quitar ${line.description}? Regresa al inventario.`
                                 : `¿Quitar ${line.description}?`
                             }
@@ -396,6 +486,13 @@ export default async function OrderPage(props: PageProps<"/dashboard/orders/[id]
             </table>
           </div>
         )}
+        {canSeePrices && order.diagnosisDiscount && order.diagnosisFee && (
+          <p className="mt-2 text-sm text-zinc-500">
+            {order.diagnosisDiscount === order.diagnosisFee
+              ? `Diagnóstico de ${formatMoney(order.diagnosisFee)} descontado de la reparación.`
+              : `Se descuentan ${formatMoney(order.diagnosisDiscount)} del diagnóstico de ${formatMoney(order.diagnosisFee)}.`}
+          </p>
+        )}
       </section>
 
       <div className={`mt-10 grid items-start gap-6 ${canSeePrices ? "lg:grid-cols-2" : ""}`}>
@@ -409,6 +506,7 @@ export default async function OrderPage(props: PageProps<"/dashboard/orders/[id]
                   accounts={accounts}
                   suggestedCents={Math.max(balanceCents, 0)}
                   label="Registrar anticipo"
+                  usesCashShift={hasModule(session.modules, "cash")}
                 />
               )}
             </div>
@@ -477,7 +575,7 @@ export default async function OrderPage(props: PageProps<"/dashboard/orders/[id]
               <ul className="mt-2 space-y-1.5 text-sm">
                 {order.purchases.map((purchase, index) => (
                   <li key={`${purchase.purchaseId}-${index}`}>
-                    {can("purchases.manage") || can("inventory.view") ? (
+                    {hasModule(session.modules, "purchases") && (can("purchases.manage") || can("inventory.view")) ? (
                       <Link href={`/dashboard/purchases/${purchase.purchaseId}`} className="text-zinc-900 hover:underline">
                         Compra #{purchase.folio}
                       </Link>

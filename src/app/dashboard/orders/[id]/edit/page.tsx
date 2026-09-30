@@ -49,7 +49,6 @@ export default async function EditOrderPage(props: PageProps<"/dashboard/orders/
             reportedIssue: order.reportedIssue,
             estimatedCost: order.estimatedCost ?? "",
             promisedOn: order.promisedOn ?? "",
-            warrantyDays: String(order.warrantyDays),
           }}
           submitLabel="Guardar cambios"
           cancelHref={detailHref}
