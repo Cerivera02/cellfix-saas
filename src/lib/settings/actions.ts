@@ -70,13 +70,17 @@ export async function updateTicketSettingsAction(_prevState: FormState, formData
   return { success: "Configuración guardada." };
 }
 
-// Configuración de las órdenes: costo sugerido del diagnóstico y si se descuenta de la reparación.
+// Configuración de las órdenes: costo sugerido del diagnóstico, si se descuenta de la reparación y
+// si se envían correos al cliente.
 export async function updateRepairSettingsAction(_prevState: FormState, formData: FormData): Promise<FormState> {
   const session = await requireTenantPermission("settings.manage");
 
   const diagnosisFee = readField(formData, "diagnosisFee", 20);
   const diagnosisCredit = formData.get("diagnosisCredit") === "on";
-  const context = { fields: { diagnosisFee, diagnosisCredit: diagnosisCredit ? "on" : "" } };
+  const notifyCustomers = formData.get("notifyCustomers") === "on";
+  const context = {
+    fields: { diagnosisFee, diagnosisCredit: diagnosisCredit ? "on" : "", notifyCustomers: notifyCustomers ? "on" : "" },
+  };
 
   const feeCents = diagnosisFee ? parseMoneyCents(diagnosisFee) : 0;
   if (feeCents === null) return { ...context, errors: { diagnosisFee: "Usa un importe como 150 o 150.50 (0 si es gratis)." } };
@@ -84,8 +88,10 @@ export async function updateRepairSettingsAction(_prevState: FormState, formData
   try {
     // Las órdenes abiertas con diagnóstico cobrado se ajustan a la nueva regla en la misma transacción.
     const actor = { userId: session.user.id, userName: session.user.name };
-    await updateRepairSettings(session.tenant.id, { diagnosisFee: fromCents(feeCents), diagnosisCredit }, (client) =>
-      syncOpenOrdersDiagnosis(client, actor),
+    await updateRepairSettings(
+      session.tenant.id,
+      { diagnosisFee: fromCents(feeCents), diagnosisCredit, notifyCustomers },
+      (client) => syncOpenOrdersDiagnosis(client, actor),
     );
   } catch (error) {
     console.error("Error al guardar la configuración de órdenes:", error);

@@ -5,16 +5,21 @@ import { isPaperWidth, type PaperWidth, type TicketSettings } from "@/lib/settin
 
 // Configuración del taller guardada en su schema: datos de los tickets y reglas de las órdenes.
 
-// Órdenes: costo sugerido del diagnóstico y si se descuenta del total al hacerse la reparación.
-export type RepairSettings = { diagnosisFee: string; diagnosisCredit: boolean };
+// Órdenes: costo sugerido del diagnóstico, si se descuenta del total al hacerse la reparación y si
+// se envían correos al cliente (enlace de seguimiento al recibir y aviso de equipo listo).
+export type RepairSettings = { diagnosisFee: string; diagnosisCredit: boolean; notifyCustomers: boolean };
 
 // Lee la configuración de órdenes dentro de una transacción ya abierta en el schema del taller.
 // Sin renglón guardado se usan los valores por omisión.
 export async function readRepairSettings(client: PoolClient): Promise<RepairSettings> {
-  const { rows } = await client.query<{ diagnosis_fee: string; diagnosis_credit: boolean }>(
-    "SELECT diagnosis_fee, diagnosis_credit FROM repair_settings",
+  const { rows } = await client.query<{ diagnosis_fee: string; diagnosis_credit: boolean; notify_customers: boolean }>(
+    "SELECT diagnosis_fee, diagnosis_credit, notify_customers FROM repair_settings",
   );
-  return { diagnosisFee: rows[0]?.diagnosis_fee ?? "0.00", diagnosisCredit: rows[0]?.diagnosis_credit ?? true };
+  return {
+    diagnosisFee: rows[0]?.diagnosis_fee ?? "0.00",
+    diagnosisCredit: rows[0]?.diagnosis_credit ?? true,
+    notifyCustomers: rows[0]?.notify_customers ?? true,
+  };
 }
 
 export async function getRepairSettings(tenantId: string) {
@@ -29,11 +34,12 @@ export async function updateRepairSettings(
 ) {
   await withTenantDb(tenantId, async (client) => {
     await client.query(
-      `INSERT INTO repair_settings (id, diagnosis_fee, diagnosis_credit)
-       VALUES (true, $1, $2)
+      `INSERT INTO repair_settings (id, diagnosis_fee, diagnosis_credit, notify_customers)
+       VALUES (true, $1, $2, $3)
        ON CONFLICT (id) DO UPDATE SET
-         diagnosis_fee = EXCLUDED.diagnosis_fee, diagnosis_credit = EXCLUDED.diagnosis_credit`,
-      [input.diagnosisFee, input.diagnosisCredit],
+         diagnosis_fee = EXCLUDED.diagnosis_fee, diagnosis_credit = EXCLUDED.diagnosis_credit,
+         notify_customers = EXCLUDED.notify_customers`,
+      [input.diagnosisFee, input.diagnosisCredit, input.notifyCustomers],
     );
     await afterSave?.(client);
   });
