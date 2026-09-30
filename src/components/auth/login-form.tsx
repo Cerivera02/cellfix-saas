@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { login } from "@/lib/auth/actions";
+import { NavIcon } from "@/components/shell/nav-icon";
 import { Field, buttonClass, inputClass } from "@/components/ui/form";
 
 export function LoginForm() {
@@ -31,16 +32,17 @@ export function LoginForm() {
             type={showPassword ? "text" : "password"}
             autoComplete="current-password"
             required
-            className={`${inputClass} pr-20`}
+            className={`${inputClass} pr-12`}
           />
           <button
             type="button"
             onClick={() => setShowPassword((value) => !value)}
-            aria-pressed={showPassword}
+            aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
             aria-controls="password"
-            className="absolute inset-y-1 right-1 rounded-md px-3 text-xs font-medium text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-2 focus-visible:outline-zinc-900"
+            title={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+            className="absolute inset-y-1 right-1 z-10 grid w-9 cursor-pointer place-items-center rounded-md text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-2 focus-visible:outline-zinc-900"
           >
-            {showPassword ? "Ocultar" : "Mostrar"}
+            <NavIcon name={showPassword ? "eyeOff" : "eye"} className="size-[1.1rem]" />
           </button>
         </div>
       </Field>
