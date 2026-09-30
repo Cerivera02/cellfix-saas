@@ -92,7 +92,10 @@ async function upsertInvoice(stripe: Stripe, invoice: Stripe.Invoice) {
 
   const subscriptionId = idOf(invoice.parent?.subscription_details?.subscription);
   const tenantId = await resolveTenantId(idOf(invoice.customer), subscriptionId);
-  if (!tenantId) return;
+  if (!tenantId) {
+    console.warn(`Factura de Stripe ${invoice.id} sin taller asociado (cliente ${idOf(invoice.customer)}).`);
+    return;
+  }
 
   const details = await paymentDetails(stripe, invoice);
   const failed = invoice.status === "open" && invoice.attempted && Boolean(details.failureMessage);

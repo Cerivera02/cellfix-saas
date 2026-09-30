@@ -12,6 +12,12 @@ export function getStripe(): Stripe | null {
   return globalForStripe.cellfixStripe;
 }
 
+// La llave define el modo: sk_live_/rk_live_ = producción; cualquier otra = modo de prueba.
+export function isStripeLiveMode() {
+  const key = process.env.STRIPE_SECRET_KEY?.trim() ?? "";
+  return key.startsWith("sk_live_") || key.startsWith("rk_live_");
+}
+
 export function isStripeConfigured() {
   return Boolean(process.env.STRIPE_SECRET_KEY?.trim());
 }

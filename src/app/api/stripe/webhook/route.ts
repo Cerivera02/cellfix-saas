@@ -1,5 +1,5 @@
 import type Stripe from "stripe";
-import { getStripe } from "@/lib/billing/stripe";
+import { getStripe, isStripeLiveMode } from "@/lib/billing/stripe";
 import { handleStripeEvent } from "@/lib/billing/webhook";
 
 // Webhook de Stripe. Es público (el proxy no lo cubre): la firma es la única prueba de origen,
@@ -20,6 +20,12 @@ export async function POST(request: Request) {
     event = stripe.webhooks.constructEvent(payload, signature, secret);
   } catch {
     return new Response("Firma inválida.", { status: 400 });
+  }
+
+  // Un evento de prueba no debe tocar datos de producción ni al revés.
+  if (event.livemode !== isStripeLiveMode()) {
+    console.error(`Evento de Stripe ${event.id} (${event.type}) con livemode=${event.livemode} que no coincide con la llave.`);
+    return new Response("El modo del evento no coincide con la llave.", { status: 400 });
   }
 
   try {
