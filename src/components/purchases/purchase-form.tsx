@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useId, useState, useTransition } from "react";
 import type { AccountOption } from "@/components/cash/payment-dialog";
-import { MoneyTextInput } from "@/components/cash/money-text-input";
+import { MoneyInput } from "@/components/ui/money-input";
 import {
   SupplierPaymentsEditor,
   newPaymentRow,
@@ -233,7 +233,7 @@ export function PurchaseForm({
                     />
                   </Field>
                   <Field label="Costo por pieza" name={`${id}-cost-${line.key}`}>
-                    <MoneyTextInput
+                    <MoneyInput
                       id={`${id}-cost-${line.key}`}
                       value={line.unitCost}
                       onChange={(value) => updateLine(line.key, { unitCost: value })}

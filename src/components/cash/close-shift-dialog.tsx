@@ -2,7 +2,7 @@
 
 import { useActionState, useId, useState } from "react";
 import { FormMessage } from "@/components/admin/form-message";
-import { MoneyTextInput } from "@/components/cash/money-text-input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Field, inputClass, primaryButtonClass, secondaryButtonClass } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { parseMoneyCents } from "@/lib/cash/form";
@@ -28,7 +28,7 @@ function CloseShiftForm({ action, expectedCash, onCancel }: { action: Action; ex
       </div>
 
       <Field label="Efectivo contado" name={`${id}-counted`} error={state?.errors?.countedAmount}>
-        <MoneyTextInput id={`${id}-counted`} name="countedAmount" value={counted} onChange={setCounted} autoFocus />
+        <MoneyInput id={`${id}-counted`} name="countedAmount" value={counted} onChange={setCounted} autoFocus />
       </Field>
 
       {difference !== null && (

@@ -1,7 +1,7 @@
 "use client";
 
-import { useId, useState, useTransition } from "react";
-import { MoneyTextInput } from "@/components/cash/money-text-input";
+import { useId, useRef, useState, useTransition } from "react";
+import { MoneyInput } from "@/components/ui/money-input";
 import {
   Field,
   dangerGhostButtonClass,
@@ -29,41 +29,24 @@ type PaymentRow = {
   reference: string;
 };
 
-// Formulario de cobro con pagos combinados. Con `exact` los pagos deben sumar `totalCents`
+function initialRows(totalCents: number, exact: boolean, key = 1): PaymentRow[] {
+  return totalCents > 0 || !exact
+    ? [{ key, method: "cash", amount: totalCents > 0 ? fromCents(totalCents) : "", bankAccountId: null, reference: "" }]
+    : [];
+}
+
+// Estado de los pagos combinados de un cobro. Con `exact` los pagos deben sumar `totalCents`
 // (ventas, saldo al entregar); sin él se cobra el importe que se capture (anticipos).
-// `onConfirm` devuelve un mensaje de error o nada si el cobro se registró.
-export function PaymentForm({
-  totalCents,
-  accounts,
-  exact = true,
-  confirmLabel = "Confirmar cobro",
-  onConfirm,
-  onCancel,
-}: {
-  totalCents: number;
-  accounts: AccountOption[];
-  exact?: boolean;
-  confirmLabel?: string;
-  onConfirm: (charge: ChargeRequest) => Promise<string | null | undefined>;
-  onCancel: () => void;
-}) {
-  const id = useId();
-  const [rows, setRows] = useState<PaymentRow[]>(
-    totalCents > 0 || !exact
-      ? [
-          {
-            key: 1,
-            method: "cash",
-            amount: totalCents > 0 ? fromCents(totalCents) : "",
-            bankAccountId: null,
-            reference: "",
-          },
-        ]
-      : [],
-  );
+// `totalCents` puede cambiar entre renders; los renglones iniciales usan el primero.
+export function usePaymentRows({ totalCents, exact }: { totalCents: number; exact: boolean }) {
+  const [rows, setRows] = useState<PaymentRow[]>(() => initialRows(totalCents, exact));
+  // Llaves siempre nuevas: los selects (no controlados) de un renglón recreado se vuelven a montar.
+  const lastKey = useRef(1);
+  const nextKey = () => {
+    lastKey.current += 1;
+    return lastKey.current;
+  };
   const [cashReceived, setCashReceived] = useState(totalCents > 0 ? fromCents(totalCents) : "");
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
 
   const amounts = rows.map((row) => parseMoneyCents(row.amount));
   const paidCents = amounts.reduce<number>((sum, amount) => sum + (amount ?? 0), 0);
@@ -87,44 +70,101 @@ export function PaymentForm({
   const updateRow = (key: number, patch: Partial<PaymentRow>) =>
     setRows((current) => current.map((row) => (row.key === key ? { ...row, ...patch } : row)));
 
-  const addRow = () =>
+  const addRow = () => {
+    const key = nextKey();
     setRows((current) => [
       ...current,
       {
-        key: Math.max(0, ...current.map((row) => row.key)) + 1,
+        key,
         method: current.some((row) => row.method === "cash") ? "debit_card" : "cash",
         amount: exact ? fromCents(Math.max(remainingCents, 0)) : "",
         bankAccountId: null,
         reference: "",
       },
     ]);
-
-  const submit = () => {
-    setError(null);
-    startTransition(async () => {
-      const message = await onConfirm({
-        payments: rows.map((row) => ({
-          method: row.method,
-          amount: row.amount,
-          bankAccountId: row.bankAccountId,
-          reference: row.reference,
-        })),
-        cashReceived: cashRow ? cashReceived : null,
-      });
-      if (message) setError(message);
-    });
   };
 
+  const removeRow = (key: number) => setRows((current) => current.filter((item) => item.key !== key));
+
+  const setAmount = (row: PaymentRow, value: string) => {
+    updateRow(row.key, { amount: value });
+    if (!exact && row.method === "cash") setCashReceived(value);
+  };
+
+  const setMethod = (row: PaymentRow, method: PaymentMethod) => {
+    updateRow(row.key, { method, bankAccountId: null, reference: "" });
+    if (method === "cash") setCashReceived(row.amount);
+  };
+
+  // Vuelve a un solo pago en efectivo por `cents` (vacío si es 0), por ejemplo al cambiar el tipo de cobro.
+  const reset = (cents: number) => {
+    setRows(initialRows(cents, false, nextKey()));
+    setCashReceived(cents > 0 ? fromCents(cents) : "");
+  };
+
+  // Con un solo pago, lo ajusta al nuevo importe a cobrar sin cambiar el método.
+  const setTotal = (cents: number) => {
+    if (rows.length !== 1) return;
+    const amount = cents > 0 ? fromCents(cents) : "";
+    updateRow(rows[0].key, { amount });
+    if (rows[0].method === "cash") setCashReceived(amount);
+  };
+
+  const toCharge = (): ChargeRequest => ({
+    payments: rows.map((row) => ({
+      method: row.method,
+      amount: row.amount,
+      bankAccountId: row.bankAccountId,
+      reference: row.reference,
+    })),
+    cashReceived: cashRow ? cashReceived : null,
+  });
+
+  return {
+    rows,
+    cashReceived,
+    setCashReceived,
+    paidCents,
+    changeCents,
+    hasCash: Boolean(cashRow),
+    blocker,
+    updateRow,
+    addRow,
+    removeRow,
+    setAmount,
+    setMethod,
+    reset,
+    setTotal,
+    toCharge,
+  };
+}
+
+export type PaymentRowsState = ReturnType<typeof usePaymentRows>;
+
+// Renglones de pago (método, importe, efectivo recibido, cuenta y referencia) de un cobro.
+// Se usa dentro de PaymentForm y en formularios que cobran al guardar, como la recepción de equipos.
+export function PaymentRowsFields({
+  state,
+  accounts,
+  canAddRows,
+}: {
+  state: PaymentRowsState;
+  accounts: AccountOption[];
+  canAddRows: boolean;
+}) {
+  const id = useId();
+  const { rows, cashReceived, setCashReceived, changeCents, hasCash, updateRow } = state;
+
   return (
-    <div className="flex flex-col gap-4">
+    <>
       {rows.map((row, index) => {
         const account = accounts.find((option) => option.id === row.bankAccountId);
         const methodOptions = PAYMENT_METHODS.filter(
-          (method) => method !== "cash" || row.method === "cash" || !cashRow,
+          (method) => method !== "cash" || row.method === "cash" || !hasCash,
         ).map((method) => ({ value: method, label: PAYMENT_METHOD_LABELS[method] }));
 
         return (
-          <div key={row.key} className="rounded-xl border border-zinc-200 p-4">
+          <div key={row.key} className="rounded-xl border border-zinc-200 bg-white p-4">
             <div className="grid gap-3 sm:grid-cols-[1fr_10rem]">
               <Field label={rows.length > 1 ? `Pago ${index + 1}` : "Método de pago"} name={`${id}-method-${row.key}`}>
                 <Select
@@ -132,20 +172,15 @@ export function PaymentForm({
                   options={methodOptions}
                   defaultValue={row.method}
                   onChange={(value) => {
-                    if (!value) return;
-                    updateRow(row.key, { method: value as PaymentMethod, bankAccountId: null, reference: "" });
-                    if (value === "cash") setCashReceived(row.amount);
+                    if (value) state.setMethod(row, value as PaymentMethod);
                   }}
                 />
               </Field>
               <Field label="Importe" name={`${id}-amount-${row.key}`}>
-                <MoneyTextInput
+                <MoneyInput
                   id={`${id}-amount-${row.key}`}
                   value={row.amount}
-                  onChange={(value) => {
-                    updateRow(row.key, { amount: value });
-                    if (!exact && row.method === "cash") setCashReceived(value);
-                  }}
+                  onChange={(value) => state.setAmount(row, value)}
                 />
               </Field>
             </div>
@@ -153,7 +188,7 @@ export function PaymentForm({
             {row.method === "cash" && (
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <Field label="Efectivo recibido" name={`${id}-received`}>
-                  <MoneyTextInput id={`${id}-received`} value={cashReceived} onChange={setCashReceived} />
+                  <MoneyInput id={`${id}-received`} value={cashReceived} onChange={setCashReceived} />
                 </Field>
                 <div className="flex flex-col justify-end">
                   <p className="text-xs font-medium tracking-wide text-zinc-500 uppercase">Cambio</p>
@@ -167,7 +202,7 @@ export function PaymentForm({
             {row.method === "transfer" &&
               (accounts.length === 0 ? (
                 <p className="mt-3 rounded-lg bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800">
-                  No hay cuentas bancarias registradas. Agrégalas en Caja → Cuentas bancarias.
+                  No hay cuentas bancarias registradas. Agrégalas en Configuración → Cuentas bancarias.
                 </p>
               ) : (
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -222,11 +257,7 @@ export function PaymentForm({
             )}
 
             {rows.length > 1 && (
-              <button
-                type="button"
-                onClick={() => setRows((current) => current.filter((item) => item.key !== row.key))}
-                className={`mt-3 ${dangerGhostButtonClass}`}
-              >
+              <button type="button" onClick={() => state.removeRow(row.key)} className={`mt-3 ${dangerGhostButtonClass}`}>
                 Quitar este pago
               </button>
             )}
@@ -234,11 +265,49 @@ export function PaymentForm({
         );
       })}
 
-      {(totalCents > 0 || !exact) && (
-        <button type="button" onClick={addRow} className={`self-start ${secondaryButtonClass}`}>
+      {canAddRows && (
+        <button type="button" onClick={state.addRow} className={`self-start ${secondaryButtonClass}`}>
           Agregar otro método de pago
         </button>
       )}
+    </>
+  );
+}
+
+// Formulario de cobro con pagos combinados. Con `exact` los pagos deben sumar `totalCents`
+// (ventas, saldo al entregar); sin él se cobra el importe que se capture (anticipos).
+// `onConfirm` devuelve un mensaje de error o nada si el cobro se registró.
+export function PaymentForm({
+  totalCents,
+  accounts,
+  exact = true,
+  confirmLabel = "Confirmar cobro",
+  onConfirm,
+  onCancel,
+}: {
+  totalCents: number;
+  accounts: AccountOption[];
+  exact?: boolean;
+  confirmLabel?: string;
+  onConfirm: (charge: ChargeRequest) => Promise<string | null | undefined>;
+  onCancel: () => void;
+}) {
+  const payment = usePaymentRows({ totalCents, exact });
+  const { rows, paidCents, blocker } = payment;
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  const submit = () => {
+    setError(null);
+    startTransition(async () => {
+      const message = await onConfirm(payment.toCharge());
+      if (message) setError(message);
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <PaymentRowsFields state={payment} accounts={accounts} canAddRows={totalCents > 0 || !exact} />
 
       <div className="rounded-xl bg-zinc-50 px-4 py-3 text-sm">
         {exact ? (

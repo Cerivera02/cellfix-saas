@@ -4,13 +4,14 @@ import { readField } from "@/lib/validation";
 // Lectura y validación de formularios de la Caja. Sin dependencias de servidor:
 // el formulario de cobro también la usa para calcular en vivo.
 
-const MONEY_PATTERN = /^\d{1,10}(?:[.,]\d{1,2})?$/;
+// Solo dígitos con punto decimal y hasta 2 decimales, sin comas ni signos.
+const MONEY_PATTERN = /^\d{1,10}(?:\.\d{1,2})?$/;
 
-// "150", "150.5" o "150,50" → centavos. Formato inválido o vacío → null.
+// "150", "150.5" o "150.50" → centavos. Formato inválido o vacío → null.
 export function parseMoneyCents(raw: string): number | null {
-  const value = raw.replace(/[\s$]/g, "");
+  const value = raw.trim();
   if (!MONEY_PATTERN.test(value)) return null;
-  const [integer, decimals = ""] = value.replace(",", ".").split(".");
+  const [integer, decimals = ""] = value.split(".");
   return Number(integer) * 100 + Number(decimals.padEnd(2, "0"));
 }
 

@@ -2,7 +2,7 @@
 
 import { useActionState, useId, useState } from "react";
 import { FormMessage } from "@/components/admin/form-message";
-import { MoneyInput } from "@/components/inventory/money-input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Field, inputClass, primaryButtonClass, secondaryButtonClass } from "@/components/ui/form";
 import { Select, type SelectOption } from "@/components/ui/select";
 import type { FormState } from "@/lib/form-state";

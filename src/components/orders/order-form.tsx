@@ -4,9 +4,11 @@ import Link from "next/link";
 import { useActionState, useId, useState } from "react";
 import { FormMessage } from "@/components/admin/form-message";
 import { CustomerPicker } from "@/components/customers/customer-picker";
+import { IntakeFields, type IntakeOptions } from "@/components/orders/intake-fields";
 import { UnlockFields } from "@/components/orders/unlock-fields";
 import { PhotoEvidence } from "@/components/photos/photo-evidence";
 import { Field, inputClass, primaryButtonClass, secondaryButtonClass } from "@/components/ui/form";
+import { DecimalInput } from "@/components/ui/money-input";
 import { Select, type SelectOption } from "@/components/ui/select";
 import type { FormState } from "@/lib/form-state";
 import { DEVICE_TYPES } from "@/lib/orders/labels";
@@ -25,7 +27,6 @@ export type OrderFormDefaults = {
   reportedIssue: string;
   estimatedCost: string;
   promisedOn: string;
-  warrantyDays: string;
 };
 
 type TextKey = Exclude<keyof OrderFormDefaults, "customer">;
@@ -36,11 +37,14 @@ export function OrderForm({
   submitLabel,
   cancelHref,
   withPhotos = false,
+  intake,
 }: {
   action: (state: FormState, formData: FormData) => Promise<FormState>;
   defaults?: OrderFormDefaults;
   // Al recibir el equipo: fotos de evidencia desde el celular, que se ligan al registrar la orden.
   withPhotos?: boolean;
+  // Al recibir el equipo: tipo de ingreso y anticipo. Al editar una orden no se muestra.
+  intake?: IntakeOptions;
   submitLabel: string;
   cancelHref: string;
 }) {
@@ -191,17 +195,19 @@ export function OrderForm({
             </Field>
           </div>
 
+          {intake && (
+            <div className="sm:col-span-3">
+              <IntakeFields options={intake} state={state} />
+            </div>
+          )}
+
           <Field label="Costo estimado" name={`${id}-estimate`} error={state?.errors?.estimatedCost} hint="Opcional.">
-            <input
+            <DecimalInput
               id={`${id}-estimate`}
               name="estimatedCost"
-              type="text"
-              inputMode="decimal"
-              autoComplete="off"
               maxLength={20}
               placeholder="0.00"
               defaultValue={value("estimatedCost")}
-              className={`${inputClass} tabular-nums`}
             />
           </Field>
 
@@ -212,18 +218,6 @@ export function OrderForm({
               type="date"
               defaultValue={value("promisedOn")}
               className={inputClass}
-            />
-          </Field>
-
-          <Field label="Garantía (días)" name={`${id}-warranty`} error={state?.errors?.warrantyDays}>
-            <input
-              id={`${id}-warranty`}
-              name="warrantyDays"
-              type="number"
-              min={0}
-              max={365}
-              defaultValue={value("warrantyDays") ?? "30"}
-              className={`${inputClass} tabular-nums`}
             />
           </Field>
         </section>

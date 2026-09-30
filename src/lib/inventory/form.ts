@@ -7,7 +7,8 @@ type Context = { fields: Record<string, string>; selections?: Record<string, str
 
 export type Parsed<T> = { input: T; context: Context; errors?: Record<string, string> };
 
-const MONEY_PATTERN = /^\d{1,10}(?:[.,]\d{1,2})?$/;
+// Solo dígitos con punto decimal y hasta 2 decimales, sin comas ni signos.
+const MONEY_PATTERN = /^\d{1,10}(?:\.\d{1,2})?$/;
 const INTEGER_PATTERN = /^\d{1,7}$/;
 const MONEY_ERROR = "Usa un importe como 150 o 150.50.";
 
@@ -17,10 +18,10 @@ function finish<T>(input: T, context: Context, errors: Record<string, string>): 
 
 // Vacío → "0.00". Formato inválido → null. Se arma el texto sin pasar por flotantes.
 function parseMoney(raw: string): string | null {
-  const value = raw.replace(/[\s$]/g, "");
+  const value = raw.trim();
   if (!value) return "0.00";
   if (!MONEY_PATTERN.test(value)) return null;
-  const [integer, decimals = ""] = value.replace(",", ".").split(".");
+  const [integer, decimals = ""] = value.split(".");
   return `${BigInt(integer).toString()}.${decimals.padEnd(2, "0")}`;
 }
 
@@ -30,13 +31,13 @@ function parseInteger(raw: string): number | null {
   return INTEGER_PATTERN.test(raw) ? Number(raw) : null;
 }
 
-const TAX_RATE_PATTERN = /^\d{1,3}(?:[.,]\d{1,2})?$/;
+const TAX_RATE_PATTERN = /^\d{1,3}(?:\.\d{1,2})?$/;
 
 // Porcentaje de IVA entre 0 y 100. Vacío, formato inválido o fuera de rango → null.
 function parseTaxRate(raw: string): string | null {
-  const value = raw.replace(/[\s%]/g, "");
+  const value = raw.trim();
   if (!TAX_RATE_PATTERN.test(value)) return null;
-  const [integer, decimals = ""] = value.replace(",", ".").split(".");
+  const [integer, decimals = ""] = value.split(".");
   const rate = `${Number(integer)}.${decimals.padEnd(2, "0")}`;
   return Number(rate) <= 100 ? rate : null;
 }

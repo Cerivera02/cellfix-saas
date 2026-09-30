@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useActionState, useId, useState } from "react";
 import { FormMessage } from "@/components/admin/form-message";
-import { MoneyInput } from "@/components/inventory/money-input";
+import { DecimalInput, MoneyInput } from "@/components/ui/money-input";
 import { Field, inputClass, primaryButtonClass, secondaryButtonClass } from "@/components/ui/form";
 import { Select, type SelectOption } from "@/components/ui/select";
 import type { FormState } from "@/lib/form-state";
@@ -185,15 +185,7 @@ export function ItemForm({
         )}
 
         <Field label="IVA (%)" name={`${id}-tax`} error={state?.errors?.taxRate} hint="Usa 0 si el artículo no lleva IVA.">
-          <input
-            id={`${id}-tax`}
-            name="taxRate"
-            type="text"
-            inputMode="decimal"
-            autoComplete="off"
-            defaultValue={value("taxRate") ?? "16"}
-            className={`${inputClass} tabular-nums`}
-          />
+          <DecimalInput id={`${id}-tax`} name="taxRate" defaultValue={value("taxRate") ?? "16"} />
         </Field>
 
         <label className="flex cursor-pointer items-start gap-3 self-start rounded-lg border border-zinc-200 px-3.5 py-3 hover:bg-zinc-50 sm:mt-6">
