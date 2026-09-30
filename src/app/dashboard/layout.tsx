@@ -29,7 +29,6 @@ export default async function DashboardLayout({ children }: LayoutProps<"/dashbo
   if (can("cash.operate") || can("cash.view")) {
     cashLinks.push({ href: "/dashboard/cash/shifts", label: "Cortes de caja", activePrefix: "/dashboard/cash/shifts/" });
   }
-  if (can("settings.manage")) cashLinks.push({ href: "/dashboard/cash/accounts", label: "Cuentas bancarias" });
   if (cashLinks.length > 0) {
     items.push({ label: "Caja", icon: "cash", children: cashLinks });
   }
@@ -58,6 +57,10 @@ export default async function DashboardLayout({ children }: LayoutProps<"/dashbo
   if (can("roles.manage")) teamLinks.push({ href: "/dashboard/roles", label: "Roles" });
   if (teamLinks.length > 0) {
     items.push({ label: "Equipo", icon: "users", children: teamLinks });
+  }
+
+  if (can("settings.manage")) {
+    items.push({ href: "/dashboard/settings", label: "Configuración", icon: "settings", activePrefix: "/dashboard/settings" });
   }
 
   return (
