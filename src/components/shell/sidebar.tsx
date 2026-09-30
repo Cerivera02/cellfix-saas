@@ -22,6 +22,8 @@ export type SidebarProps = {
   homeHref: string;
   user: { name: string; email: string };
   items: NavItem[];
+  // Aviso breve sobre la cuenta (p. ej. días de prueba), arriba del usuario.
+  notice?: React.ReactNode;
 };
 
 // Cuánto coincide la ruta con un enlace; gana la coincidencia más específica,
@@ -116,7 +118,7 @@ function NavGroup({
   );
 }
 
-export function Sidebar({ context, homeHref, user, items, onNavigate }: SidebarProps & { onNavigate?: () => void }) {
+export function Sidebar({ context, homeHref, user, items, notice, onNavigate }: SidebarProps & { onNavigate?: () => void }) {
   const pathname = usePathname();
   const activeHref = getActiveHref(pathname, items);
 
@@ -164,6 +166,13 @@ export function Sidebar({ context, homeHref, user, items, onNavigate }: SidebarP
           })}
         </ul>
       </nav>
+
+      {/* El aviso puede traer un enlace: al seguirlo se cierra el menú móvil. */}
+      {notice && (
+        <div className="px-6 pb-3" onClick={onNavigate}>
+          {notice}
+        </div>
+      )}
 
       <div className="border-t border-zinc-100 p-3">
         <div className="px-3 py-2">

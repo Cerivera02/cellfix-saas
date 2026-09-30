@@ -2,7 +2,7 @@ import { getSession } from "@/lib/auth/session";
 import { ORDER_ACCESS_PERMISSIONS } from "@/lib/orders/labels";
 import { readPhoto } from "@/lib/photos/core";
 
-// Sirve una foto de evidencia. Exige sesión del taller con acceso a Órdenes.
+// Sirve una foto de evidencia. Exige sesión del taller con acceso a Órdenes y sin bloqueo por pago.
 export async function GET(_request: Request, ctx: RouteContext<"/api/orders/photos/[id]">) {
   const session = await getSession();
   if (
@@ -11,6 +11,9 @@ export async function GET(_request: Request, ctx: RouteContext<"/api/orders/phot
     !ORDER_ACCESS_PERMISSIONS.some((permission) => session.permissions.includes(permission))
   ) {
     return new Response("No autorizado", { status: 401 });
+  }
+  if (session.access.state === "locked") {
+    return new Response("El acceso del taller está pausado por falta de pago.", { status: 403 });
   }
 
   const { id } = await ctx.params;

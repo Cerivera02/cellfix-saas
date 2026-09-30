@@ -11,6 +11,7 @@ const NAV_ITEMS: NavItem[] = [
       { href: "/admin/tenants/new", label: "Nuevo taller" },
     ],
   },
+  { href: "/admin/precios", label: "Precios", icon: "card" },
 ];
 
 // El layout solo arma la navegación; cada página y acción vuelve a verificar

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { StatusBadge } from "@/components/admin/status-badge";
+import { SubscriptionBadge } from "@/components/admin/subscription-badge";
 import { TenantTabs } from "@/components/admin/tenant-tabs";
 import { getTenant } from "@/lib/admin/tenants";
 
@@ -26,6 +27,7 @@ export default async function TenantLayout({ children, params }: LayoutProps<"/a
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">{tenant.name}</h1>
         <StatusBadge status={tenant.status} />
+        <SubscriptionBadge access={tenant.subscription.access} status={tenant.subscription.status} />
       </div>
       <p className="mt-1 font-mono text-sm text-zinc-500">{tenant.slug}</p>
 
