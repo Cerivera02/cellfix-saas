@@ -2,7 +2,7 @@
 
 import { useId } from "react";
 import type { AccountOption } from "@/components/cash/payment-dialog";
-import { MoneyTextInput } from "@/components/cash/money-text-input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Field, dangerGhostButtonClass, inputClass, secondaryButtonClass } from "@/components/ui/form";
 import { Select } from "@/components/ui/select";
 import { describeAccount } from "@/lib/cash/format";
@@ -64,7 +64,7 @@ export function SupplierPaymentsEditor({
               />
             </Field>
             <Field label="Importe" name={`${id}-amount-${row.key}`}>
-              <MoneyTextInput
+              <MoneyInput
                 id={`${id}-amount-${row.key}`}
                 value={row.amount}
                 onChange={(value) => update(row.key, { amount: value })}

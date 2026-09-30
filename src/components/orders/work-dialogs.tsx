@@ -4,12 +4,17 @@ import { useId, useState } from "react";
 import { FormMessage } from "@/components/admin/form-message";
 import { DialogButton, useDialogAction } from "@/components/ui/dialog-button";
 import { Field, inputClass, primaryButtonClass, secondaryButtonClass } from "@/components/ui/form";
+import { DecimalInput } from "@/components/ui/money-input";
+import {
+  MAX_QUANTITY,
+  PriceTaxFields,
+  clampQuantity,
+  parseQuantity,
+  useRepairItemSearch,
+} from "@/components/orders/part-fields";
 import { AsyncSelect, Select, type SelectOption } from "@/components/ui/select";
 import type { FormState } from "@/lib/form-state";
-import { formatMoney } from "@/lib/inventory/format";
-import { searchRepairItemsAction } from "@/lib/orders/actions";
 import {
-  LABOR_TAX_RATES,
   ORDER_OUTCOMES,
   ORDER_OUTCOME_LABELS,
   ORDER_STATUS_LABELS,
@@ -21,13 +26,23 @@ import {
 
 type Action = (state: FormState, formData: FormData) => Promise<FormState>;
 
-function Actions({ pending, label, onCancel }: { pending: boolean; label: string; onCancel: () => void }) {
+function Actions({
+  pending,
+  label,
+  onCancel,
+  disabled = false,
+}: {
+  pending: boolean;
+  label: string;
+  onCancel: () => void;
+  disabled?: boolean;
+}) {
   return (
     <div className="flex justify-end gap-3">
       <button type="button" onClick={onCancel} className={secondaryButtonClass}>
         Cancelar
       </button>
-      <button type="submit" disabled={pending} className={primaryButtonClass}>
+      <button type="submit" disabled={pending || disabled} className={primaryButtonClass}>
         {pending ? "Guardando…" : label}
       </button>
     </div>
@@ -38,11 +53,13 @@ function DiagnosisForm({
   action,
   defaults,
   showEstimate,
+  customerVisible,
   onDone,
 }: {
   action: Action;
   defaults: { diagnosis: string; estimatedCost: string; promisedOn: string };
   showEstimate: boolean;
+  customerVisible: boolean;
   onDone: () => void;
 }) {
   const [state, formAction, pending] = useDialogAction(action, onDone);
@@ -51,7 +68,7 @@ function DiagnosisForm({
 
   return (
     <form action={formAction} className="flex flex-col gap-4" noValidate>
-      <Field label="Diagnóstico" name={`${id}-diagnosis`} hint="Qué tiene el equipo y qué se propone hacer.">
+      <Field label="Diagnóstico" name={`${id}-diagnosis`} hint={`Qué tiene el equipo y qué se propone hacer.${customerVisible ? " El cliente lo verá en el seguimiento." : ""}`}>
         <textarea
           id={`${id}-diagnosis`}
           name="diagnosis"
@@ -64,15 +81,11 @@ function DiagnosisForm({
       <div className="grid gap-4 sm:grid-cols-2">
         {showEstimate && (
           <Field label="Costo estimado" name={`${id}-estimate`} error={state?.errors?.estimatedCost}>
-            <input
+            <DecimalInput
               id={`${id}-estimate`}
               name="estimatedCost"
-              type="text"
-              inputMode="decimal"
-              autoComplete="off"
               placeholder="0.00"
               defaultValue={value("estimatedCost")}
-              className={`${inputClass} tabular-nums`}
             />
           </Field>
         )}
@@ -90,16 +103,19 @@ export function DiagnosisDialog({
   action,
   defaults,
   showEstimate,
+  customerVisible,
 }: {
   action: Action;
   defaults: { diagnosis: string; estimatedCost: string; promisedOn: string };
   // Los técnicos no ven precios: solo capturan el diagnóstico y la fecha.
   showEstimate: boolean;
+  // El diagnóstico se muestra en la página de seguimiento del cliente.
+  customerVisible: boolean;
 }) {
   const title = showEstimate ? "Diagnóstico y presupuesto" : "Diagnóstico";
   return (
     <DialogButton label={title} className={secondaryButtonClass} title={title}>
-      {(close) => <DiagnosisForm action={action} defaults={defaults} showEstimate={showEstimate} onDone={close} />}
+      {(close) => <DiagnosisForm action={action} defaults={defaults} showEstimate={showEstimate} customerVisible={customerVisible} onDone={close} />}
     </DialogButton>
   );
 }
@@ -175,24 +191,30 @@ export function StatusDialog({ action, current }: { action: Action; current: Ord
 function PartForm({ action, onDone }: { action: Action; onDone: () => void }) {
   const [state, formAction, pending] = useDialogAction(action, onDone);
   const [part, setPart] = useState<SelectOption | null>(null);
-  const id = useId();
-
+  // Existencias de la refacción elegida; null si no lleva control de existencias.
+  const [stock, setStock] = useState<number | null>(null);
+  const [quantity, setQuantity] = useState(state?.fields?.quantity ?? "1");
   // El precio (pieza + mano de obra) solo llega a quien puede ver precios.
-  const loadParts = async (query: string) =>
-    (await searchRepairItemsAction(query)).map((item) => {
-      const stock = item.trackStock ? (item.stock === 0 ? "Agotado" : `${item.stock} en existencia`) : "Sin control de existencias";
-      return {
-        value: item.id,
-        label: item.name,
-        detail: item.price === null ? stock : `${stock} · ${formatMoney(item.price)} con mano de obra`,
-      };
-    });
+  const { loadOptions: loadParts, find } = useRepairItemSearch();
+  const id = useId();
+  const max = Math.min(stock ?? MAX_QUANTITY, MAX_QUANTITY);
+
+  // Al cambiar de refacción la cantidad se ajusta a lo que hay en existencia.
+  const choosePart = (option: SelectOption | null) => {
+    const item = option ? find(option.value) : null;
+    const nextStock = item?.trackStock ? item.stock : null;
+    setPart(option);
+    setStock(nextStock);
+    setQuantity((current) => clampQuantity(current, Math.min(nextStock ?? MAX_QUANTITY, MAX_QUANTITY)));
+  };
+
+  const stockHint = stock === null ? null : stock === 0 ? "Sin existencias." : `Hay ${stock} en existencia.`;
 
   return (
     <form action={formAction} className="flex flex-col gap-4" noValidate>
       <input type="hidden" name="itemId" value={part?.value ?? ""} />
       <Field label="Refacción" name={`${id}-item`} error={state?.errors?.itemId}>
-        <AsyncSelect id={`${id}-item`} value={part} onChange={setPart} loadOptions={loadParts} placeholder="Nombre o código de barras" />
+        <AsyncSelect id={`${id}-item`} value={part} onChange={choosePart} loadOptions={loadParts} placeholder="Nombre o código de barras" />
       </Field>
       <Field label="Cantidad" name={`${id}-quantity`} error={state?.errors?.quantity}>
         <input
@@ -200,14 +222,19 @@ function PartForm({ action, onDone }: { action: Action; onDone: () => void }) {
           name="quantity"
           type="number"
           min={1}
-          max={1000}
-          defaultValue={state?.fields?.quantity ?? "1"}
+          max={Math.max(max, 1)}
+          value={quantity}
+          onChange={(event) => setQuantity(clampQuantity(event.target.value, max))}
+          aria-describedby={`${id}-stock`}
           className={`${inputClass} tabular-nums sm:w-32`}
         />
+        <p id={`${id}-stock`} aria-live="polite" className="text-xs text-zinc-500">
+          {stockHint}
+        </p>
       </Field>
       <p className="text-xs text-zinc-500">Se descuenta del inventario al agregarla; si la quitas, regresa.</p>
       <FormMessage state={state} />
-      <Actions pending={pending} label="Agregar refacción" onCancel={onDone} />
+      <Actions pending={pending} label="Agregar refacción" onCancel={onDone} disabled={stock === 0} />
     </form>
   );
 }
@@ -223,7 +250,6 @@ export function PartDialog({ action }: { action: Action }) {
 function LaborForm({ action, onDone }: { action: Action; onDone: () => void }) {
   const [state, formAction, pending] = useDialogAction(action, onDone);
   const id = useId();
-  const taxIncludedDefault = state?.selections?.taxIncluded ? state.selections.taxIncluded.length > 0 : true;
 
   return (
     <form action={formAction} className="flex flex-col gap-4" noValidate>
@@ -239,35 +265,58 @@ function LaborForm({ action, onDone }: { action: Action; onDone: () => void }) {
           className={inputClass}
         />
       </Field>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Precio" name={`${id}-price`} error={state?.errors?.price}>
-          <input
-            id={`${id}-price`}
-            name="price"
-            type="text"
-            inputMode="decimal"
-            autoComplete="off"
-            placeholder="0.00"
-            defaultValue={state?.fields?.price}
-            className={`${inputClass} tabular-nums`}
-          />
-        </Field>
-        <Field label="IVA" name={`${id}-tax`} error={state?.errors?.taxRate}>
-          <Select
-            id={`${id}-tax`}
-            name="taxRate"
-            options={LABOR_TAX_RATES.map((rate) => ({ value: rate, label: rate === "0" ? "Sin IVA" : `${rate}%` }))}
-            defaultValue={state?.fields?.taxRate || "16"}
-          />
-        </Field>
-      </div>
-      <label className="flex cursor-pointer items-center gap-2.5 text-sm text-zinc-700">
-        <input type="checkbox" name="taxIncluded" defaultChecked={taxIncludedDefault} className="size-4 accent-zinc-900" />
-        El precio ya incluye IVA
-      </label>
+      <PriceTaxFields id={id} state={state} priceLabel="Precio" />
       <FormMessage state={state} />
       <Actions pending={pending} label="Agregar mano de obra" onCancel={onDone} />
     </form>
+  );
+}
+
+function FreePartForm({ action, showPrices, onDone }: { action: Action; showPrices: boolean; onDone: () => void }) {
+  const [state, formAction, pending] = useDialogAction(action, onDone);
+  const [quantity, setQuantity] = useState(state?.fields?.quantity ?? "1");
+  const id = useId();
+  const pieces = parseQuantity(quantity);
+
+  return (
+    <form action={formAction} className="flex flex-col gap-4" noValidate>
+      <Field label="Refacción" name={`${id}-description`} error={state?.errors?.description}>
+        <input
+          id={`${id}-description`}
+          name="description"
+          type="text"
+          autoComplete="off"
+          maxLength={150}
+          placeholder="Pantalla, batería, centro de carga…"
+          defaultValue={state?.fields?.description}
+          className={inputClass}
+        />
+      </Field>
+      <Field label="Cantidad" name={`${id}-quantity`} error={state?.errors?.quantity}>
+        <input
+          id={`${id}-quantity`}
+          name="quantity"
+          type="number"
+          min={1}
+          max={MAX_QUANTITY}
+          value={quantity}
+          onChange={(event) => setQuantity(event.target.value)}
+          className={`${inputClass} tabular-nums sm:w-32`}
+        />
+      </Field>
+      {showPrices && <PriceTaxFields id={id} state={state} priceLabel="Precio por pieza" quantity={pieces} />}
+      <FormMessage state={state} />
+      <Actions pending={pending} label="Agregar refacción" onCancel={onDone} />
+    </form>
+  );
+}
+
+// Para talleres sin el módulo de Inventario: la refacción se describe a mano.
+export function FreePartDialog({ action, showPrices }: { action: Action; showPrices: boolean }) {
+  return (
+    <DialogButton label="Agregar refacción" className={secondaryButtonClass} title="Agregar refacción">
+      {(close) => <FreePartForm action={action} showPrices={showPrices} onDone={close} />}
+    </DialogButton>
   );
 }
 
