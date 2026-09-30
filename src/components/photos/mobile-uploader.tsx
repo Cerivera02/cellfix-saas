@@ -5,24 +5,55 @@ import { primaryButtonClass, secondaryButtonClass } from "@/components/ui/form";
 
 type Upload = { key: number; preview: string; status: "uploading" | "done" | "error"; message?: string };
 
-const MAX_SIDE = 1600;
+// Pasadas de compresión: se usa la primera que quede bajo TARGET_BYTES. Con 1600 px se
+// alcanzan a leer rayones, números de serie y etiquetas.
+const PASSES = [
+  { maxSide: 1600, quality: 0.8 },
+  { maxSide: 1600, quality: 0.68 },
+  { maxSide: 1280, quality: 0.62 },
+];
+const TARGET_BYTES = 450 * 1024;
 
-// Reduce la foto antes de subirla (menos datos móviles) y la convierte a JPEG, lo que también
-// resuelve formatos como HEIC. Si el navegador no puede procesarla, se sube tal cual.
+function encode(canvas: HTMLCanvasElement, type: string, quality: number) {
+  return new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality));
+}
+
+// Reduce la foto antes de subirla para ocupar solo el espacio necesario. Prefiere WebP
+// (más ligero con la misma calidad) y cae a JPEG donde el navegador no sabe generarlo,
+// como Safari en iPhone. Convertir también resuelve formatos como HEIC. Si el navegador
+// no puede procesarla, se sube tal cual.
 async function compress(file: File): Promise<Blob> {
   try {
     const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
-    const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement("canvas");
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    canvas.getContext("2d")?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    let best: Blob | null = null;
+
+    for (const pass of PASSES) {
+      const scale = Math.min(1, pass.maxSide / Math.max(bitmap.width, bitmap.height));
+      canvas.width = Math.round(bitmap.width * scale);
+      canvas.height = Math.round(bitmap.height * scale);
+      canvas.getContext("2d")?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+
+      // toBlob devuelve PNG cuando no soporta el tipo pedido: se revisa el tipo real.
+      let blob = await encode(canvas, "image/webp", pass.quality);
+      if (blob?.type !== "image/webp") blob = await encode(canvas, "image/jpeg", pass.quality);
+      if (blob && (!best || blob.size < best.size)) best = blob;
+      if (best && best.size <= TARGET_BYTES) break;
+    }
+
     bitmap.close();
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.82));
-    return blob ?? file;
+    canvas.width = canvas.height = 0;
+
+    // Siempre se sube la versión redibujada, aunque el original pese menos: redibujar descarta
+    // los metadatos (ubicación GPS, modelo del celular) que el cliente podría ver en el seguimiento.
+    return best ?? file;
   } catch {
     return file;
   }
+}
+
+function fileNameFor(blob: Blob) {
+  return blob.type === "image/webp" ? "foto.webp" : blob.type === "image/png" ? "foto.png" : "foto.jpg";
 }
 
 export function MobileUploader({ uploadUrl, initialCount }: { uploadUrl: string; initialCount: number }) {
@@ -48,7 +79,8 @@ export function MobileUploader({ uploadUrl, initialCount }: { uploadUrl: string;
 
       try {
         const body = new FormData();
-        body.append("photo", await compress(file), "foto.jpg");
+        const photo = await compress(file);
+        body.append("photo", photo, fileNameFor(photo));
         const response = await fetch(uploadUrl, { method: "POST", body });
         const result = (await response.json().catch(() => ({}))) as { message?: string };
         update(key, response.ok ? { status: "done" } : { status: "error", message: result.message ?? "No se pudo subir." });
