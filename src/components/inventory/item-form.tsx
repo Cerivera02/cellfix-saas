@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useActionState, useId, useState } from "react";
 import { FormMessage } from "@/components/admin/form-message";
-import { DecimalInput, MoneyInput } from "@/components/ui/money-input";
+import { DecimalInput, IntegerInput, MoneyInput } from "@/components/ui/money-input";
 import { Field, inputClass, primaryButtonClass, secondaryButtonClass } from "@/components/ui/form";
 import { Select, type SelectOption } from "@/components/ui/select";
 import type { FormState } from "@/lib/form-state";
@@ -236,16 +236,11 @@ export function ItemForm({
             error={state?.errors?.initialStock}
             hint="Unidades que tienes hoy. Queda registrado en el historial."
           >
-            <input
+            <IntegerInput
               id={`${id}-initial`}
               name="initialStock"
-              type="number"
-              min={0}
-              step={1}
-              inputMode="numeric"
               placeholder="0"
               defaultValue={state?.fields?.initialStock}
-              className={inputClass}
             />
           </Field>
         )}
@@ -257,17 +252,7 @@ export function ItemForm({
             error={state?.errors?.minStock}
             hint="Al llegar a este número se marca como “Por agotarse”."
           >
-            <input
-              id={`${id}-min`}
-              name="minStock"
-              type="number"
-              min={0}
-              step={1}
-              inputMode="numeric"
-              placeholder="0"
-              defaultValue={value("minStock")}
-              className={inputClass}
-            />
+            <IntegerInput id={`${id}-min`} name="minStock" placeholder="0" defaultValue={value("minStock")} />
           </Field>
         )}
       </section>

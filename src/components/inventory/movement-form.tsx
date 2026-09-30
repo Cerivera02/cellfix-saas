@@ -2,7 +2,7 @@
 
 import { useActionState, useId, useState } from "react";
 import { FormMessage } from "@/components/admin/form-message";
-import { MoneyInput } from "@/components/ui/money-input";
+import { IntegerInput, MoneyInput } from "@/components/ui/money-input";
 import { Field, inputClass, primaryButtonClass, secondaryButtonClass } from "@/components/ui/form";
 import { Select, type SelectOption } from "@/components/ui/select";
 import type { FormState } from "@/lib/form-state";
@@ -56,17 +56,7 @@ export function MovementForm({
         error={state?.errors?.quantity}
         hint={type === "adjustment_out" ? "Unidades que salen del inventario." : "Unidades que entran al inventario."}
       >
-        <input
-          id={`${id}-quantity`}
-          name="quantity"
-          type="number"
-          min={1}
-          step={1}
-          inputMode="numeric"
-          required
-          defaultValue={fields?.quantity}
-          className={inputClass}
-        />
+        <IntegerInput id={`${id}-quantity`} name="quantity" required defaultValue={fields?.quantity} />
       </Field>
 
       {isPurchase ? (

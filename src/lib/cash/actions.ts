@@ -165,7 +165,11 @@ export async function createSaleAction(request: SaleRequest): Promise<{ message:
   try {
     const sale = await createSale(tenantId, actor, {
       customerId: String(request.customerId),
-      lines: request.lines.map((line) => ({ itemId: String(line?.itemId ?? ""), quantity: Number(line?.quantity) })),
+      // Solo enteros sin signo ni exponente; lo demás llega como NaN y createSale lo rechaza.
+      lines: request.lines.map((line) => ({
+        itemId: String(line?.itemId ?? ""),
+        quantity: /^\d{1,6}$/.test(String(line?.quantity)) ? Number(line?.quantity) : NaN,
+      })),
       payments,
       cashReceivedCents,
     });

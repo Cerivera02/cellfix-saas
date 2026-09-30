@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useId, useState, useTransition } from "react";
 import type { AccountOption } from "@/components/cash/payment-dialog";
-import { MoneyInput } from "@/components/ui/money-input";
+import { IntegerInput, MoneyInput } from "@/components/ui/money-input";
 import {
   SupplierPaymentsEditor,
   newPaymentRow,
@@ -223,13 +223,11 @@ export function PurchaseForm({
                 </div>
                 <div className="mt-3 grid gap-3 sm:grid-cols-[6rem_9rem_1fr]">
                   <Field label="Cantidad" name={`${id}-qty-${line.key}`}>
-                    <input
+                    <IntegerInput
                       id={`${id}-qty-${line.key}`}
-                      type="number"
-                      min={1}
+                      maxLength={6}
                       value={line.quantity}
-                      onChange={(event) => updateLine(line.key, { quantity: event.target.value })}
-                      className={`${inputClass} tabular-nums`}
+                      onChange={(value) => updateLine(line.key, { quantity: value })}
                     />
                   </Field>
                   <Field label="Costo por pieza" name={`${id}-cost-${line.key}`}>

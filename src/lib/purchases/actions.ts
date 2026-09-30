@@ -98,7 +98,8 @@ export async function createPurchaseAction(request: PurchaseRequest): Promise<{ 
     if (unitCostCents === null) return { message: "Revisa los costos por pieza." };
     lines.push({
       itemId: String(line?.itemId ?? ""),
-      quantity: Number(line?.quantity),
+      // Solo enteros sin signo ni exponente; lo demás llega como NaN y createPurchase lo rechaza.
+      quantity: /^\d{1,6}$/.test(String(line?.quantity)) ? Number(line?.quantity) : NaN,
       unitCostCents,
       repairOrderId: line?.repairOrderId ? String(line.repairOrderId) : null,
     });

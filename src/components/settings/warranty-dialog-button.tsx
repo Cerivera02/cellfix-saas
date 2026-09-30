@@ -4,6 +4,7 @@ import { useActionState, useId, useState } from "react";
 import { FormMessage } from "@/components/admin/form-message";
 import { Field, ghostButtonClass, inputClass, primaryButtonClass, secondaryButtonClass } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
+import { IntegerInput } from "@/components/ui/money-input";
 import type { FormState } from "@/lib/form-state";
 
 type WarrantyDefaults = { name: string; days: string };
@@ -44,16 +45,7 @@ function WarrantyForm({
           />
         </Field>
         <Field label="Días" name={`${id}-days`} error={state?.errors?.days}>
-          <input
-            id={`${id}-days`}
-            name="days"
-            type="text"
-            inputMode="numeric"
-            autoComplete="off"
-            maxLength={4}
-            defaultValue={value("days")}
-            className={`${inputClass} tabular-nums`}
-          />
+          <IntegerInput id={`${id}-days`} name="days" maxLength={4} defaultValue={value("days")} />
         </Field>
       </div>
 

@@ -2,7 +2,8 @@
 
 import { useActionState } from "react";
 import { FormMessage } from "@/components/admin/form-message";
-import { Field, inputClass, primaryButtonClass } from "@/components/ui/form";
+import { Field, primaryButtonClass } from "@/components/ui/form";
+import { IntegerInput } from "@/components/ui/money-input";
 import type { FormState } from "@/lib/form-state";
 
 export function ExtendTrialForm({ action }: { action: (state: FormState, formData: FormData) => Promise<FormState> }) {
@@ -13,14 +14,7 @@ export function ExtendTrialForm({ action }: { action: (state: FormState, formDat
       <div className="flex items-end gap-3">
         <div className="w-32">
           <Field label="Días" name="days" error={state?.errors?.days}>
-            <input
-              id="days"
-              name="days"
-              type="text"
-              inputMode="numeric"
-              defaultValue={state?.fields?.days ?? "7"}
-              className={inputClass}
-            />
+            <IntegerInput id="days" name="days" defaultValue={state?.fields?.days ?? "7"} />
           </Field>
         </div>
         <button type="submit" disabled={pending} className={`mb-px py-2.5 ${primaryButtonClass}`}>
