@@ -13,9 +13,12 @@ import { computeLine, fromCents, toCents } from "@/lib/cash/money";
 import { applyStockMovement } from "@/lib/inventory/core";
 import { formatMoney } from "@/lib/inventory/format";
 import {
+  DIAGNOSIS_LINE_DESCRIPTION,
+  INTAKE_TYPE_LABELS,
   ORDER_STATUS_LABELS,
   WORK_TRANSITIONS,
   describeDevice,
+  type IntakeType,
   type OrderOutcome,
   type OrderPaymentKind,
   type OrderStatus,
@@ -23,7 +26,9 @@ import {
   type UnlockType,
 } from "@/lib/orders/labels";
 import { attachUploadSession } from "@/lib/photos/core";
+import { readRepairSettings } from "@/lib/settings/core";
 import { withTenantDb } from "@/lib/tenancy/db";
+import { findActiveWarranty, hasActiveWarranties, type WarrantyInput } from "@/lib/warranties/core";
 import { UUID_PATTERN } from "@/lib/validation";
 
 // Órdenes de reparación: recepción, trabajo del técnico (refacciones y mano de obra),
@@ -44,8 +49,32 @@ export type OrderInput = {
   reportedIssue: string;
   estimatedCents: number | null;
   promisedOn: string | null;
-  warrantyDays: number;
 };
+
+// Tipo de ingreso y cobro al recibir el equipo. No se modifica al editar la orden.
+export type OrderIntake = {
+  type: IntakeType;
+  // Solo en diagnóstico: costo en centavos (0 = diagnóstico gratis).
+  diagnosisFeeCents: number;
+  // Anticipo o pago del diagnóstico; null si no se cobra al recibir.
+  payment: { payments: PaymentInput[]; cashReceivedCents: number | null } | null;
+  // Si quien recibe puede cobrar: sin ese permiso la orden se registra sin cobro.
+  canCollect: boolean;
+  // Refacción en existencia: artículos del inventario que se agregan como renglones (el precio
+  // sale del artículo) o, sin el módulo de Inventario, la refacción capturada a mano.
+  parts: IntakePart[];
+  freePart: FreeLineInput | null;
+  // Refacción por conseguir: piezas que hay que conseguir, sin precio; no son renglones ni mueven
+  // inventario.
+  partsToGet: PartToGetInput[];
+};
+
+export type IntakePart = { itemId: string; quantity: number };
+
+// Pieza por conseguir: del inventario (el nombre lo pone el servidor) o descrita a mano.
+export type PartToGetInput = { itemId: string | null; description: string; quantity: number };
+
+export type OrderPartToGet = { id: string; itemId: string | null; description: string; quantity: number };
 
 export type OrderSummary = {
   id: string;
@@ -78,6 +107,8 @@ export type OrderLine = {
   subtotal: string;
   taxAmount: string;
   total: string;
+  // Renglón del diagnóstico cobrado al recibir; no se quita a mano.
+  isDiagnosis: boolean;
   userName: string;
   createdAt: Date;
 };
@@ -118,12 +149,23 @@ export type OrderDetail = OrderSummary & {
   reportedIssue: string;
   diagnosis: string;
   estimatedCost: string | null;
+  // Garantía elegida al entregar (copia del catálogo). Solo cuenta en órdenes entregadas como
+  // reparadas; las entregadas antes del catálogo tienen días pero no nombre.
   warrantyDays: number;
+  warrantyName: string | null;
   technicianId: string | null;
   cancelReason: string;
   createdByName: string;
   updatedAt: Date;
   deliveredAt: Date | null;
+  // null en órdenes registradas antes de existir el tipo de ingreso.
+  intakeType: IntakeType | null;
+  diagnosisFee: string | null;
+  // Refacciones por conseguir anotadas al recibir (vacío si no aplica).
+  partsToGet: OrderPartToGet[];
+  // Parte del diagnóstico cobrado que se descuenta de la reparación (null si nada). Si es igual a
+  // diagnosisFee, el diagnóstico se descontó completo y su renglón ya no está en la orden.
+  diagnosisDiscount: string | null;
   subtotal: string;
   taxTotal: string;
   lines: OrderLine[];
@@ -308,11 +350,14 @@ export async function getOrder(tenantId: string, orderId: string): Promise<Order
         diagnosis: string;
         estimated_cost: string | null;
         warranty_days: number;
+        warranty_name: string | null;
         technician_id: string | null;
         cancel_reason: string;
         created_by_name: string;
         updated_at: Date;
         delivered_at: Date | null;
+        intake_type: IntakeType | null;
+        diagnosis_fee: string | null;
       }
     >(
       `SELECT o.id, o.folio::int AS folio, o.status, o.device_type, o.brand, o.model, o.serial_number,
@@ -320,7 +365,8 @@ export async function getOrder(tenantId: string, orderId: string): Promise<Order
               btrim(c.first_name || ' ' || c.last_name) AS customer_name, c.phone AS customer_phone,
               0 AS total, o.customer_id, c.email AS customer_email, o.outcome, o.color, o.unlock_type, o.unlock_code,
               o.accessories, o.device_condition, o.reported_issue, o.diagnosis, o.estimated_cost,
-              o.warranty_days, o.technician_id, o.cancel_reason, o.created_by_name, o.updated_at, o.delivered_at
+              o.warranty_days, o.warranty_name, o.technician_id, o.cancel_reason, o.created_by_name, o.updated_at, o.delivered_at,
+              o.intake_type, o.diagnosis_fee
          FROM repair_orders o
          JOIN customers c ON c.id = o.customer_id
         WHERE o.id = $1`,
@@ -342,11 +388,12 @@ export async function getOrder(tenantId: string, orderId: string): Promise<Order
       subtotal: string;
       tax_amount: string;
       total: string;
+      is_diagnosis: boolean;
       user_name: string;
       created_at: Date;
     }>(
       `SELECT id, kind, item_id, description, quantity, unit_price, labor_price, tax_rate, tax_included, subtotal, tax_amount,
-              total, user_name, created_at
+              total, is_diagnosis, user_name, created_at
          FROM repair_order_lines WHERE order_id = $1 ORDER BY kind DESC, created_at`,
       [orderId],
     );
@@ -401,6 +448,16 @@ export async function getOrder(tenantId: string, orderId: string): Promise<Order
       [orderId],
     );
 
+    const { rows: partToGetRows } = await client.query<{
+      id: string;
+      item_id: string | null;
+      description: string;
+      quantity: number;
+    }>(
+      "SELECT id, item_id, description, quantity FROM repair_order_quoted_parts WHERE order_id = $1 ORDER BY created_at, id",
+      [orderId],
+    );
+
     const lines: OrderLine[] = lineRows.map((line) => ({
       id: line.id,
       kind: line.kind,
@@ -414,9 +471,17 @@ export async function getOrder(tenantId: string, orderId: string): Promise<Order
       subtotal: line.subtotal,
       taxAmount: line.tax_amount,
       total: line.total,
+      isDiagnosis: line.is_diagnosis,
       userName: line.user_name,
       createdAt: line.created_at,
     }));
+    const diagnosisFee = row.diagnosis_fee !== null && toCents(row.diagnosis_fee) > 0 ? row.diagnosis_fee : null;
+    const diagnosisLine = lines.find((line) => line.isDiagnosis);
+    // En órdenes canceladas se borran todos los renglones: ahí no hay descuento que mostrar.
+    const discountCents =
+      diagnosisFee !== null && row.status !== "cancelled"
+        ? toCents(diagnosisFee) - (diagnosisLine ? toCents(diagnosisLine.total) : 0)
+        : 0;
 
     return {
       ...mapSummary(row),
@@ -435,11 +500,21 @@ export async function getOrder(tenantId: string, orderId: string): Promise<Order
       diagnosis: row.diagnosis,
       estimatedCost: row.estimated_cost,
       warrantyDays: row.warranty_days,
+      warrantyName: row.warranty_name,
       technicianId: row.technician_id,
       cancelReason: row.cancel_reason,
       createdByName: row.created_by_name,
       updatedAt: row.updated_at,
       deliveredAt: row.delivered_at,
+      intakeType: row.intake_type,
+      diagnosisFee,
+      partsToGet: partToGetRows.map((part) => ({
+        id: part.id,
+        itemId: part.item_id,
+        description: part.description,
+        quantity: part.quantity,
+      })),
+      diagnosisDiscount: discountCents > 0 ? fromCents(discountCents) : null,
       lines,
       payments: paymentRows.map((payment) => ({
         id: payment.id,
@@ -624,35 +699,273 @@ function orderValues(input: OrderInput) {
     input.reportedIssue,
     input.estimatedCents === null ? null : fromCents(input.estimatedCents),
     input.promisedOn,
-    input.warrantyDays,
     input.unlockType,
   ];
+}
+
+// El diagnóstico se cobra como mano de obra con IVA incluido.
+const DIAGNOSIS_TAX_RATE = 16;
+
+function diagnosisAmounts(cents: number) {
+  return computeLine({ unitPriceCents: cents, quantity: 1, taxRate: DIAGNOSIS_TAX_RATE, taxIncluded: true });
+}
+
+async function insertDiagnosisLine(client: PoolClient, actor: CashActor, orderId: string, feeCents: number) {
+  const amounts = diagnosisAmounts(feeCents);
+  await client.query(
+    `INSERT INTO repair_order_lines (order_id, kind, description, quantity, unit_price, tax_rate, tax_included,
+                                     subtotal, tax_amount, total, is_diagnosis, user_id, user_name)
+     VALUES ($1, 'labor', $2, 1, $3, $4, true, $5, $6, $7, true, $8, $9)`,
+    [
+      orderId,
+      DIAGNOSIS_LINE_DESCRIPTION,
+      fromCents(feeCents),
+      DIAGNOSIS_TAX_RATE,
+      fromCents(amounts.subtotal),
+      fromCents(amounts.tax),
+      fromCents(amounts.total),
+      actor.userId,
+      actor.userName,
+    ],
+  );
+}
+
+// Descuento del diagnóstico. El diagnóstico cobrado al recibir es un cobro mínimo: si el taller lo
+// descuenta y la orden no se entrega sin reparación, el renglón del diagnóstico cobra solo lo que
+// falte para llegar a su costo (nada si la reparación ya lo supera); si no, se cobra completo.
+// Nunca genera saldo a favor. Se llama después de cada cambio en los renglones, en el resultado de
+// la orden y al entregarla; el total siempre sale de los renglones.
+async function syncDiagnosisLine(client: PoolClient, actor: CashActor, orderId: string) {
+  const { rows } = await client.query<{
+    diagnosis_fee: string | null;
+    outcome: OrderOutcome | null;
+    work_total: string;
+    line_id: string | null;
+    line_total: string | null;
+  }>(
+    `SELECT o.diagnosis_fee, o.outcome,
+            COALESCE((SELECT sum(l.total) FROM repair_order_lines l WHERE l.order_id = o.id AND NOT l.is_diagnosis), 0)::text
+              AS work_total,
+            d.id AS line_id, d.total AS line_total
+       FROM repair_orders o
+       LEFT JOIN repair_order_lines d ON d.order_id = o.id AND d.is_diagnosis
+      WHERE o.id = $1`,
+    [orderId],
+  );
+  const row = rows[0];
+  const feeCents = row?.diagnosis_fee ? toCents(row.diagnosis_fee) : 0;
+  if (!row || feeCents <= 0) return;
+
+  const { diagnosisCredit } = await readRepairSettings(client);
+  const credited = diagnosisCredit && row.outcome !== "not_repaired";
+  const desiredCents = credited ? Math.max(0, feeCents - toCents(row.work_total)) : feeCents;
+  const currentCents = row.line_total !== null ? toCents(row.line_total) : 0;
+  if (desiredCents === currentCents && (row.line_id !== null) === desiredCents > 0) return;
+
+  if (desiredCents === 0) {
+    await client.query("DELETE FROM repair_order_lines WHERE order_id = $1 AND is_diagnosis", [orderId]);
+  } else if (row.line_id) {
+    const amounts = diagnosisAmounts(desiredCents);
+    await client.query(
+      "UPDATE repair_order_lines SET unit_price = $1, subtotal = $2, tax_amount = $3, total = $4 WHERE id = $5",
+      [fromCents(desiredCents), fromCents(amounts.subtotal), fromCents(amounts.tax), fromCents(amounts.total), row.line_id],
+    );
+  } else {
+    await insertDiagnosisLine(client, actor, orderId, desiredCents);
+  }
+
+  // Solo se anota cuando pasa de cobrarse completo a descontarse (en parte o completo), o al revés.
+  const wasFull = currentCents === feeCents;
+  const isFull = desiredCents === feeCents;
+  if (wasFull !== isFull) {
+    await addEvent(
+      client,
+      actor,
+      orderId,
+      null,
+      isFull ? "Se vuelve a cobrar el diagnóstico." : "El diagnóstico se descuenta de la reparación.",
+    );
+  }
+}
+
+// Aplica la configuración de órdenes recién guardada a las órdenes abiertas con diagnóstico cobrado,
+// para que sus totales (y el saldo al entregar) reflejen el cambio. Corre en la misma transacción.
+export async function syncOpenOrdersDiagnosis(client: PoolClient, actor: CashActor) {
+  const { rows } = await client.query<{ id: string }>(
+    `SELECT id FROM repair_orders
+      WHERE diagnosis_fee > 0 AND status NOT IN ('delivered', 'cancelled')
+      ORDER BY id FOR UPDATE`,
+  );
+  for (const row of rows) await syncDiagnosisLine(client, actor, row.id);
+}
+
+// Revisa el cobro de la recepción según el tipo de ingreso. El anticipo obligatorio solo se
+// exige a quien puede cobrar; sin ese permiso la orden se registra sin cobro.
+function checkIntakePayment(intake: OrderIntake) {
+  if (!intake.canCollect) {
+    if (intake.payment) throw new OrderError("No tienes permiso para cobrar reparaciones.");
+    return;
+  }
+  const hasPayment = (intake.payment?.payments.length ?? 0) > 0;
+  switch (intake.type) {
+    case "in_stock":
+      if (!hasPayment) throw new OrderError("Registra el anticipo: la refacción está en existencia.");
+      break;
+    case "diagnosis":
+      if (intake.diagnosisFeeCents > 0 && !hasPayment) throw new OrderError("Cobra el diagnóstico para registrar la orden.");
+      if (intake.diagnosisFeeCents === 0 && hasPayment) throw new OrderError("El diagnóstico es gratis: no hay nada que cobrar.");
+      break;
+    case "order_part":
+      break;
+  }
+}
+
+// Refacciones de la recepción según el tipo de ingreso: en existencia se elige al menos una; por
+// conseguir se anota al menos una pieza. Lo que no corresponde al tipo se ignora. Los artículos
+// repetidos se juntan y se ordenan para bloquear los artículos siempre en el mismo orden.
+function normalizeIntakeParts(intake: OrderIntake) {
+  const parts = new Map<string, number>();
+  let freePart: FreeLineInput | null = null;
+  const partsToGet: PartToGetInput[] = [];
+
+  if (intake.type === "in_stock") {
+    if (intake.parts.length > 20) throw new OrderError("Son demasiadas refacciones.");
+    for (const part of intake.parts) {
+      assertIds(part.itemId);
+      checkQuantity(part.quantity);
+      parts.set(part.itemId, (parts.get(part.itemId) ?? 0) + part.quantity);
+    }
+    for (const quantity of parts.values()) checkQuantity(quantity);
+    if (intake.freePart) {
+      checkFreeLine("part", intake.freePart);
+      freePart = intake.freePart;
+    }
+    if (parts.size === 0 && !freePart) throw new OrderError("Elige la refacción que se va a cambiar.");
+  } else if (intake.type === "order_part") {
+    if (intake.partsToGet.length > 20) throw new OrderError("Son demasiadas refacciones.");
+    for (const part of intake.partsToGet) {
+      checkQuantity(part.quantity);
+      if (part.itemId !== null) {
+        assertIds(part.itemId);
+        const itemId = part.itemId.toLowerCase();
+        const same = partsToGet.find((entry) => entry.itemId === itemId);
+        if (same) {
+          same.quantity += part.quantity;
+          checkQuantity(same.quantity);
+        } else {
+          // El nombre lo pone el servidor con el artículo.
+          partsToGet.push({ itemId, description: "", quantity: part.quantity });
+        }
+      } else {
+        const description = part.description.trim().slice(0, 150);
+        if (!description) throw new OrderError("Describe la refacción que hay que conseguir.");
+        partsToGet.push({ itemId: null, description, quantity: part.quantity });
+      }
+    }
+    if (partsToGet.length === 0) throw new OrderError("Anota la refacción que hay que conseguir.");
+  }
+
+  return {
+    parts: [...parts].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([itemId, quantity]) => ({ itemId, quantity })),
+    freePart,
+    partsToGet,
+  };
+}
+
+// Anota las refacciones por conseguir de una orden nueva. De los artículos del inventario se
+// guarda su nombre actual; pueden estar agotados. No mueven existencias ni generan cobro.
+async function insertPartsToGet(client: PoolClient, orderId: string, partsToGet: PartToGetInput[]) {
+  const itemIds = partsToGet.flatMap((part) => (part.itemId ? [part.itemId] : []));
+  const names = new Map<string, string>();
+  if (itemIds.length > 0) {
+    const { rows } = await client.query<{ id: string; name: string }>(
+      `SELECT id, name FROM items
+        WHERE id = ANY($1::uuid[]) AND is_active AND (is_repair_part OR is_for_sale)`,
+      [itemIds],
+    );
+    for (const row of rows) names.set(row.id, row.name);
+  }
+
+  for (const part of partsToGet) {
+    let description = part.description;
+    if (part.itemId) {
+      const name = names.get(part.itemId);
+      if (!name) throw new OrderError("Uno de los artículos ya no está disponible.");
+      description = name.slice(0, 150);
+    }
+    await client.query(
+      "INSERT INTO repair_order_quoted_parts (order_id, item_id, description, quantity) VALUES ($1, $2, $3, $4)",
+      [orderId, part.itemId, description, part.quantity],
+    );
+  }
 }
 
 export async function createOrder(
   tenantId: string,
   actor: CashActor,
   input: OrderInput,
+  intake: OrderIntake,
   // Enlaces de fotos generados durante la recepción: sus fotos quedan ligadas a la orden.
-  options: { photoSessionIds: string[] } = { photoSessionIds: [] },
+  options: { photoSessionIds: string[]; cash: CashOptions },
 ) {
-  assertIds(input.customerId, ...options.photoSessionIds);
+  const payments = intake.payment?.payments ?? [];
+  assertIds(input.customerId, ...options.photoSessionIds, ...payments.map((payment) => payment.bankAccountId));
+  if (!Number.isInteger(intake.diagnosisFeeCents) || intake.diagnosisFeeCents < 0) {
+    throw new OrderError("Costo del diagnóstico no válido.");
+  }
+  const diagnosisFeeCents = intake.type === "diagnosis" ? intake.diagnosisFeeCents : 0;
+  const { parts, freePart, partsToGet } = normalizeIntakeParts(intake);
+  checkIntakePayment({ ...intake, diagnosisFeeCents });
 
+  // Todo en una transacción: si el cobro falla, la orden no se registra.
   return withTenantDb(tenantId, async (client) => {
+    let shiftId: string | null = null;
+    if (payments.length > 0) {
+      shiftId = await findShiftId(client, options.cash);
+      assertShift(shiftId, options.cash, "Abre la caja para cobrar al recibir el equipo.");
+    }
+
     await assertCustomer(client, input.customerId);
     const { rows } = await client.query<{ id: string; folio: number }>(
       `INSERT INTO repair_orders (customer_id, device_type, brand, model, serial_number, color, unlock_code,
                                   accessories, device_condition, reported_issue, estimated_cost, promised_on,
-                                  warranty_days, unlock_type, created_by, created_by_name)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                                  unlock_type, created_by, created_by_name, intake_type, diagnosis_fee)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
        RETURNING id, folio::int AS folio`,
-      [...orderValues(input), actor.userId, actor.userName],
+      [
+        ...orderValues(input),
+        actor.userId,
+        actor.userName,
+        intake.type,
+        diagnosisFeeCents > 0 ? fromCents(diagnosisFeeCents) : null,
+      ],
     );
-    await addEvent(client, actor, rows[0].id, "received", "");
-    for (const sessionId of options.photoSessionIds) {
-      await attachUploadSession(client, sessionId, rows[0].id);
+    const order = rows[0];
+    await addEvent(client, actor, order.id, "received", INTAKE_TYPE_LABELS[intake.type]);
+    if (partsToGet.length > 0) await insertPartsToGet(client, order.id, partsToGet);
+
+    if (diagnosisFeeCents > 0) await insertDiagnosisLine(client, actor, order.id, diagnosisFeeCents);
+    // La refacción en existencia se aparta desde la recepción: se descuenta del inventario igual
+    // que cuando la agrega el técnico, y regresa si la orden se cancela.
+    for (const part of parts) await insertInventoryPart(client, actor, order, part);
+    if (freePart) await insertFreeLine(client, actor, order.id, "part", freePart);
+
+    if (payments.length > 0) {
+      const amount = sumCents(payments.map((payment) => payment.amountCents));
+      const cash = await validatePayments(client, payments, {
+        // El diagnóstico se cobra completo; el anticipo, lo que se capture.
+        totalCents: diagnosisFeeCents > 0 ? diagnosisFeeCents : amount,
+        cashReceivedCents: intake.payment?.cashReceivedCents ?? null,
+      });
+      await insertPayments(client, actor, order.id, shiftId, "deposit", payments, cash);
+      await client.query("UPDATE repair_orders SET paid_total = $1 WHERE id = $2", [fromCents(amount), order.id]);
     }
-    return rows[0];
+
+    await syncDiagnosisLine(client, actor, order.id);
+    for (const sessionId of options.photoSessionIds) {
+      await attachUploadSession(client, sessionId, order.id);
+    }
+    return order;
   });
 }
 
@@ -666,8 +979,8 @@ export async function updateOrder(tenantId: string, orderId: string, input: Orde
       `UPDATE repair_orders
           SET customer_id = $1, device_type = $2, brand = $3, model = $4, serial_number = $5, color = $6,
               unlock_code = $7, accessories = $8, device_condition = $9, reported_issue = $10,
-              estimated_cost = $11, promised_on = $12, warranty_days = $13, unlock_type = $14
-        WHERE id = $15`,
+              estimated_cost = $11, promised_on = $12, unlock_type = $13
+        WHERE id = $14`,
       [...orderValues(input), orderId],
     );
   });
@@ -784,6 +1097,8 @@ export async function changeStatus(
       [input.status, input.status === "ready" ? input.outcome : null, actor.userId, actor.userName, orderId],
     );
     await addEvent(client, actor, orderId, input.status, input.note);
+    // Sin reparación el diagnóstico se cobra completo; al volver a reparación se descuenta otra vez.
+    await syncDiagnosisLine(client, actor, orderId);
   });
 }
 
@@ -795,128 +1110,177 @@ export async function addPart(
   options: WorkOptions = NO_OVERRIDE,
 ) {
   assertIds(orderId, input.itemId);
-  if (!Number.isInteger(input.quantity) || input.quantity < 1 || input.quantity > 1000) {
-    throw new OrderError("Cantidad no válida.");
-  }
+  checkQuantity(input.quantity);
 
   await withTenantDb(tenantId, async (client) => {
     const order = await lockOrder(client, orderId);
     assertActive(order);
     assertAssigned(order, actor, options);
-
-    const { rows } = await client.query<{
-      id: string;
-      name: string;
-      sale_price: string;
-      tax_rate: string;
-      tax_included: boolean;
-      track_stock: boolean;
-      stock: number;
-      is_active: boolean;
-      is_for_sale: boolean;
-      is_repair_part: boolean;
-      labor_price: string;
-    }>(
-      `SELECT id, name, sale_price, tax_rate, tax_included, track_stock, stock, is_active, is_for_sale, is_repair_part,
-              labor_price
-         FROM items WHERE id = $1 FOR UPDATE`,
-      [input.itemId],
-    );
-    const item = rows[0];
-    if (!item || !item.is_active || !(item.is_repair_part || item.is_for_sale)) {
-      throw new OrderError("El artículo ya no está disponible.");
-    }
-    if (item.track_stock && item.stock < input.quantity) {
-      throw new OrderError(`No hay suficientes existencias de ${item.name} (quedan ${item.stock}).`);
-    }
-
-    // Se cobra la pieza más su mano de obra, con el IVA del artículo.
-    const amounts = computeLine({
-      unitPriceCents: toCents(item.sale_price) + toCents(item.labor_price),
-      quantity: input.quantity,
-      taxRate: Number(item.tax_rate),
-      taxIncluded: item.tax_included,
-    });
-
-    // Se descuenta del inventario en cuanto se agrega a la orden.
-    if (item.track_stock) {
-      await applyStockMovement(client, actor, item.id, {
-        kind: "repair",
-        quantity: -input.quantity,
-        unitCost: null,
-        supplierId: null,
-        note: `Orden #${order.folio}`,
-      });
-    }
-
-    await client.query(
-      `INSERT INTO repair_order_lines (order_id, kind, item_id, description, track_stock, quantity, unit_price,
-                                       tax_rate, tax_included, subtotal, tax_amount, total, user_id, user_name,
-                                       labor_price)
-       VALUES ($1, 'part', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
-      [
-        orderId,
-        item.id,
-        item.name,
-        item.track_stock,
-        input.quantity,
-        item.sale_price,
-        item.tax_rate,
-        item.tax_included,
-        fromCents(amounts.subtotal),
-        fromCents(amounts.tax),
-        fromCents(amounts.total),
-        actor.userId,
-        actor.userName,
-        item.labor_price,
-      ],
-    );
+    await insertInventoryPart(client, actor, order, input);
+    await syncDiagnosisLine(client, actor, orderId);
   });
 }
 
-export async function addLabor(
+function checkQuantity(quantity: number) {
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 1000) throw new OrderError("Cantidad no válida.");
+}
+
+// Agrega un artículo del inventario como renglón: el precio sale del artículo (nunca del navegador)
+// y se descuenta de las existencias. La orden ya está bloqueada y revisada por quien llama.
+async function insertInventoryPart(
+  client: PoolClient,
+  actor: CashActor,
+  order: { id: string; folio: number },
+  input: IntakePart,
+) {
+  const { rows } = await client.query<{
+    id: string;
+    name: string;
+    sale_price: string;
+    tax_rate: string;
+    tax_included: boolean;
+    track_stock: boolean;
+    stock: number;
+    is_active: boolean;
+    is_for_sale: boolean;
+    is_repair_part: boolean;
+    labor_price: string;
+  }>(
+    `SELECT id, name, sale_price, tax_rate, tax_included, track_stock, stock, is_active, is_for_sale, is_repair_part,
+            labor_price
+       FROM items WHERE id = $1 FOR UPDATE`,
+    [input.itemId],
+  );
+  const item = rows[0];
+  if (!item || !item.is_active || !(item.is_repair_part || item.is_for_sale)) {
+    throw new OrderError("El artículo ya no está disponible.");
+  }
+  if (item.track_stock && item.stock < input.quantity) {
+    throw new OrderError(`No hay suficientes existencias de ${item.name} (quedan ${item.stock}).`);
+  }
+
+  // Se cobra la pieza más su mano de obra, con el IVA del artículo.
+  const amounts = computeLine({
+    unitPriceCents: toCents(item.sale_price) + toCents(item.labor_price),
+    quantity: input.quantity,
+    taxRate: Number(item.tax_rate),
+    taxIncluded: item.tax_included,
+  });
+
+  // Se descuenta del inventario en cuanto se agrega a la orden.
+  if (item.track_stock) {
+    await applyStockMovement(client, actor, item.id, {
+      kind: "repair",
+      quantity: -input.quantity,
+      unitCost: null,
+      supplierId: null,
+      note: `Orden #${order.folio}`,
+    });
+  }
+
+  await client.query(
+    `INSERT INTO repair_order_lines (order_id, kind, item_id, description, track_stock, quantity, unit_price,
+                                     tax_rate, tax_included, subtotal, tax_amount, total, user_id, user_name,
+                                     labor_price)
+     VALUES ($1, 'part', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+    [
+      order.id,
+      item.id,
+      item.name,
+      item.track_stock,
+      input.quantity,
+      item.sale_price,
+      item.tax_rate,
+      item.tax_included,
+      fromCents(amounts.subtotal),
+      fromCents(amounts.tax),
+      fromCents(amounts.total),
+      actor.userId,
+      actor.userName,
+      item.labor_price,
+    ],
+  );
+}
+
+export type FreeLineInput = {
+  description: string;
+  quantity: number;
+  priceCents: number;
+  taxRate: number;
+  taxIncluded: boolean;
+};
+
+// Renglón capturado a mano: mano de obra, o una refacción sin artículo del inventario
+// (talleres sin el módulo de Inventario). No toca existencias.
+export async function addFreeLine(
   tenantId: string,
   actor: CashActor,
   orderId: string,
-  input: { description: string; priceCents: number; taxRate: number; taxIncluded: boolean },
+  kind: "part" | "labor",
+  input: FreeLineInput,
   options: WorkOptions = NO_OVERRIDE,
 ) {
   assertIds(orderId);
-  if (!input.description) throw new OrderError("Describe el trabajo.");
-  if (!Number.isInteger(input.priceCents) || input.priceCents < 0) throw new OrderError("Precio no válido.");
-  if (!(input.taxRate >= 0 && input.taxRate <= 100)) throw new OrderError("IVA no válido.");
+  checkFreeLine(kind, input);
 
   await withTenantDb(tenantId, async (client) => {
     const order = await lockOrder(client, orderId);
     assertActive(order);
     assertAssigned(order, actor, options);
-    const amounts = computeLine({
-      unitPriceCents: input.priceCents,
-      quantity: 1,
-      taxRate: input.taxRate,
-      taxIncluded: input.taxIncluded,
-    });
-    await client.query(
-      `INSERT INTO repair_order_lines (order_id, kind, description, quantity, unit_price, tax_rate, tax_included,
-                                       subtotal, tax_amount, total, user_id, user_name)
-       VALUES ($1, 'labor', $2, 1, $3, $4, $5, $6, $7, $8, $9, $10)`,
-      [
-        orderId,
-        input.description,
-        fromCents(input.priceCents),
-        input.taxRate,
-        input.taxIncluded,
-        fromCents(amounts.subtotal),
-        fromCents(amounts.tax),
-        fromCents(amounts.total),
-        actor.userId,
-        actor.userName,
-      ],
-    );
+    await insertFreeLine(client, actor, orderId, kind, input);
+    await syncDiagnosisLine(client, actor, orderId);
   });
 }
 
-type LineRow = { kind: "part" | "labor"; item_id: string | null; description: string; track_stock: boolean; quantity: number };
+function checkFreeLine(kind: "part" | "labor", input: FreeLineInput) {
+  if (!input.description) throw new OrderError(kind === "part" ? "Describe la refacción." : "Describe el trabajo.");
+  checkQuantity(input.quantity);
+  if (!Number.isInteger(input.priceCents) || input.priceCents < 0) throw new OrderError("Precio no válido.");
+  if (!(input.taxRate >= 0 && input.taxRate <= 100)) throw new OrderError("IVA no válido.");
+}
+
+async function insertFreeLine(
+  client: PoolClient,
+  actor: CashActor,
+  orderId: string,
+  kind: "part" | "labor",
+  input: FreeLineInput,
+) {
+  const amounts = computeLine({
+    unitPriceCents: input.priceCents,
+    quantity: input.quantity,
+    taxRate: input.taxRate,
+    taxIncluded: input.taxIncluded,
+  });
+  await client.query(
+    `INSERT INTO repair_order_lines (order_id, kind, description, quantity, unit_price, tax_rate, tax_included,
+                                     subtotal, tax_amount, total, user_id, user_name)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+    [
+      orderId,
+      kind,
+      input.description,
+      input.quantity,
+      fromCents(input.priceCents),
+      input.taxRate,
+      input.taxIncluded,
+      fromCents(amounts.subtotal),
+      fromCents(amounts.tax),
+      fromCents(amounts.total),
+      actor.userId,
+      actor.userName,
+    ],
+  );
+}
+
+type LineRow = {
+  kind: "part" | "labor";
+  item_id: string | null;
+  description: string;
+  track_stock: boolean;
+  quantity: number;
+  is_diagnosis: boolean;
+};
 
 // Regresa al inventario una refacción descontada. Devuelve si hubo movimiento.
 async function returnPartToStock(client: PoolClient, actor: CashActor, line: LineRow, note: string) {
@@ -941,7 +1305,13 @@ export async function removeLine(
   orderId: string,
   lineId: string,
   // `allowLabor`: quien maneja los cobros puede quitar mano de obra de cualquier orden.
-  options: WorkOptions & { allowLabor: boolean } = { ...NO_OVERRIDE, allowLabor: false },
+  // `allowIntakeFix`: quien recibe equipos puede quitar una refacción elegida por error al
+  // recibir, mientras la orden siga recibida y sin técnico.
+  options: WorkOptions & { allowLabor: boolean; allowIntakeFix: boolean } = {
+    ...NO_OVERRIDE,
+    allowLabor: false,
+    allowIntakeFix: false,
+  },
 ) {
   assertIds(orderId, lineId);
 
@@ -949,29 +1319,46 @@ export async function removeLine(
     const order = await lockOrder(client, orderId);
     assertActive(order);
     const { rows } = await client.query<LineRow>(
-      "SELECT kind, item_id, description, track_stock, quantity FROM repair_order_lines WHERE id = $1 AND order_id = $2 FOR UPDATE",
+      `SELECT kind, item_id, description, track_stock, quantity, is_diagnosis
+         FROM repair_order_lines WHERE id = $1 AND order_id = $2 FOR UPDATE`,
       [lineId, orderId],
     );
     const line = rows[0];
     if (!line) throw new OrderError("El renglón ya no existe.");
+    if (line.is_diagnosis) {
+      throw new OrderError("El diagnóstico cobrado al recibir el equipo no se puede quitar.");
+    }
 
     // Las refacciones las quita el técnico de la orden; la mano de obra, quien maneja los cobros.
     if (line.kind === "labor") {
       if (!options.allowLabor) throw new OrderError("La mano de obra solo la quita quien maneja los cobros.");
-    } else {
+    } else if (!(options.allowIntakeFix && order.status === "received" && order.technician_id === null)) {
       assertAssigned(order, actor, options);
     }
 
     await returnPartToStock(client, actor, line, `Se quitó de la orden #${order.folio}`);
     await client.query("DELETE FROM repair_order_lines WHERE id = $1", [lineId]);
+    await syncDiagnosisLine(client, actor, orderId);
   });
+}
+
+// `useCashShift`: con el módulo de Caja el dinero entra al turno abierto (y sin turno no se cobra);
+// sin él, los cobros y reembolsos se registran sin turno ni revisión del efectivo en caja.
+export type CashOptions = { useCashShift: boolean };
+
+async function findShiftId(client: PoolClient, options: CashOptions) {
+  return options.useCashShift ? findOpenShiftId(client, true) : null;
+}
+
+function assertShift(shiftId: string | null, options: CashOptions, message: string) {
+  if (options.useCashShift && !shiftId) throw new OrderError(message);
 }
 
 async function insertPayments(
   client: PoolClient,
   actor: CashActor,
   orderId: string,
-  shiftId: string,
+  shiftId: string | null,
   kind: OrderPaymentKind,
   payments: PaymentInput[],
   cash: { cashReceived: number | null; change: number },
@@ -999,19 +1386,20 @@ async function insertPayments(
   }
 }
 
-// Anticipo o abono antes de entregar. Entra al turno de caja abierto.
+// Anticipo o abono antes de entregar. Con Caja, entra al turno abierto.
 export async function addOrderPayment(
   tenantId: string,
   actor: CashActor,
   orderId: string,
   input: { payments: PaymentInput[]; cashReceivedCents: number | null },
+  options: CashOptions,
 ) {
   assertIds(orderId, ...input.payments.map((payment) => payment.bankAccountId));
   if (input.payments.length === 0) throw new OrderError("Agrega al menos un pago.");
 
   return withTenantDb(tenantId, async (client) => {
-    const shiftId = await findOpenShiftId(client, true);
-    if (!shiftId) throw new OrderError("Abre la caja para registrar cobros.");
+    const shiftId = await findShiftId(client, options);
+    assertShift(shiftId, options, "Abre la caja para registrar cobros.");
     const order = await lockOrder(client, orderId);
     assertActive(order);
 
@@ -1032,22 +1420,56 @@ export async function deliverOrder(
   tenantId: string,
   actor: CashActor,
   orderId: string,
-  input: { payments: PaymentInput[]; cashReceivedCents: number | null; refundMethod: PaymentMethod | null },
+  input: {
+    payments: PaymentInput[];
+    cashReceivedCents: number | null;
+    refundMethod: PaymentMethod | null;
+    // Total que vio quien entrega; si ya no coincide, se rechaza para no cobrar o reembolsar de más.
+    expectedTotalCents: number | null;
+    // Garantía del catálogo; solo se usa si el equipo quedó reparado.
+    warrantyId: string | null;
+  },
+  options: CashOptions,
 ) {
   assertIds(orderId, ...input.payments.map((payment) => payment.bankAccountId));
 
   return withTenantDb(tenantId, async (client) => {
-    const shiftId = await findOpenShiftId(client, true);
+    const shiftId = await findShiftId(client, options);
     const order = await lockOrder(client, orderId);
     assertActive(order);
     if (order.status !== "ready") throw new OrderError("Marca la orden como lista para entregar antes de entregarla.");
 
+    // La garantía se elige del catálogo activo y se guarda una copia. Sin reparación no hay garantía;
+    // con el catálogo vacío el equipo reparado se entrega sin garantía.
+    const { rows: outcomeRows } = await client.query<{ outcome: OrderOutcome | null }>(
+      "SELECT outcome FROM repair_orders WHERE id = $1",
+      [orderId],
+    );
+    let warranty: WarrantyInput = { name: "", days: 0 };
+    if (outcomeRows[0]?.outcome === "repaired") {
+      if (input.warrantyId) {
+        const found = await findActiveWarranty(client, input.warrantyId);
+        if (!found) throw new OrderError("La garantía elegida ya no está disponible. Elige otra.");
+        warranty = found;
+      } else if (await hasActiveWarranties(client)) {
+        throw new OrderError("Elige la garantía del equipo.");
+      }
+    }
+    // Normalmente no cambia nada (los renglones, el resultado y la configuración ya sincronizan);
+    // asegura que se cobre con la regla vigente del diagnóstico.
+    await syncDiagnosisLine(client, actor, orderId);
+
     const total = await loadTotalCents(client, orderId);
+    if (input.expectedTotalCents !== null && input.expectedTotalCents !== total) {
+      throw new OrderError(
+        `El total de la orden cambió a ${formatMoney(fromCents(total))}. Recarga la página para ver el saldo actualizado.`,
+      );
+    }
     const balance = total - toCents(order.paid_total);
     let change = 0;
 
     if (balance > 0) {
-      if (!shiftId) throw new OrderError("Abre la caja para cobrar el saldo.");
+      assertShift(shiftId, options, "Abre la caja para cobrar el saldo.");
       const cash = await validatePayments(client, input.payments, {
         totalCents: balance,
         cashReceivedCents: input.cashReceivedCents,
@@ -1063,8 +1485,8 @@ export async function deliverOrder(
       if (!input.refundMethod) {
         throw new OrderError(`Elige cómo se reembolsan ${formatMoney(fromCents(refund))} al cliente.`);
       }
-      if (!shiftId) throw new OrderError("Abre la caja para registrar el reembolso.");
-      if (input.refundMethod === "cash") await assertCashAvailable(client, shiftId, refund, "para reembolsar");
+      assertShift(shiftId, options, "Abre la caja para registrar el reembolso.");
+      if (shiftId && input.refundMethod === "cash") await assertCashAvailable(client, shiftId, refund, "para reembolsar");
       await insertPayments(
         client,
         actor,
@@ -1077,8 +1499,10 @@ export async function deliverOrder(
     }
 
     await client.query(
-      "UPDATE repair_orders SET status = 'delivered', delivered_at = now(), paid_total = $1 WHERE id = $2",
-      [fromCents(total), orderId],
+      `UPDATE repair_orders
+          SET status = 'delivered', delivered_at = now(), paid_total = $1, warranty_days = $2, warranty_name = $3
+        WHERE id = $4`,
+      [fromCents(total), warranty.days, warranty.name || null, orderId],
     );
     await addEvent(client, actor, orderId, "delivered", "");
 
@@ -1092,12 +1516,13 @@ export async function cancelOrder(
   actor: CashActor,
   orderId: string,
   input: { reason: string; refundMethod: PaymentMethod | null },
+  options: CashOptions,
 ) {
   assertIds(orderId);
   if (!input.reason) throw new OrderError("Escribe el motivo de la cancelación.");
 
   await withTenantDb(tenantId, async (client) => {
-    const shiftId = await findOpenShiftId(client, true);
+    const shiftId = await findShiftId(client, options);
     const order = await lockOrder(client, orderId);
     assertActive(order);
 
@@ -1106,8 +1531,8 @@ export async function cancelOrder(
       if (!input.refundMethod) {
         throw new OrderError(`Elige cómo se reembolsan los ${formatMoney(order.paid_total)} pagados.`);
       }
-      if (!shiftId) throw new OrderError("Abre la caja para registrar el reembolso.");
-      if (input.refundMethod === "cash") await assertCashAvailable(client, shiftId, paid, "para reembolsar");
+      assertShift(shiftId, options, "Abre la caja para registrar el reembolso.");
+      if (shiftId && input.refundMethod === "cash") await assertCashAvailable(client, shiftId, paid, "para reembolsar");
       await insertPayments(
         client,
         actor,
@@ -1120,7 +1545,7 @@ export async function cancelOrder(
     }
 
     const { rows: lines } = await client.query<LineRow>(
-      `SELECT kind, item_id, description, track_stock, quantity
+      `SELECT kind, item_id, description, track_stock, quantity, is_diagnosis
          FROM repair_order_lines WHERE order_id = $1 ORDER BY item_id FOR UPDATE`,
       [orderId],
     );
