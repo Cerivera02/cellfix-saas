@@ -1,9 +1,13 @@
 import "server-only";
+import { createHash } from "node:crypto";
+import StripeLib from "stripe";
 import type Stripe from "stripe";
-import { db } from "@/lib/db";
+import { db, withTransaction } from "@/lib/db";
 import type { SubscriptionStatus } from "@/lib/billing/access";
+import { formatCents } from "@/lib/billing/format";
 import { syncInvoiceById } from "@/lib/billing/payments";
 import { getPublicPricing } from "@/lib/billing/pricing";
+import { checkoutTrial, minimumChargeCents } from "@/lib/billing/rules";
 import { BASE_PRODUCT_ID, ensureProduct, getStripe, moduleFromProductId, moduleProductId } from "@/lib/billing/stripe";
 import { MODULES, MODULE_KEYS, normalizeModules, type ModuleKey } from "@/lib/modules";
 import { UUID_PATTERN } from "@/lib/validation";
@@ -164,18 +168,31 @@ export async function syncSubscriptionById(subscriptionId: string, options: { cl
   await syncSubscription(subscription, options);
 }
 
+// Resultado de confirmar un checkout: "confirmed" (pagado o en prueba, suscripción viva),
+// "pending" (Stripe aún procesa el pago), "invalid" (no es de este taller o no terminó) y
+// "duplicate" (el taller ya tenía otra suscripción; la nueva se canceló).
+export type CheckoutOutcome = "confirmed" | "pending" | "invalid" | "duplicate";
+
 // Checkout terminado: liga la suscripción nueva al taller que la pagó. Si el taller ya tenía
 // otra suscripción viva (dos checkouts a la vez), se cancela la nueva para no cobrar doble.
-export async function syncCheckoutSession(checkout: Stripe.Checkout.Session, expectedTenantId?: string) {
+export async function syncCheckoutSession(
+  checkout: Stripe.Checkout.Session,
+  expectedTenantId?: string,
+): Promise<CheckoutOutcome> {
   const tenantId = checkout.metadata?.tenantId ?? checkout.client_reference_id;
-  if (!tenantId || !UUID_PATTERN.test(tenantId)) return false;
-  if (expectedTenantId && tenantId !== expectedTenantId) return false;
-  if (checkout.mode !== "subscription" || checkout.status !== "complete" || !checkout.subscription) return false;
+  if (!tenantId || !UUID_PATTERN.test(tenantId)) return "invalid";
+  if (expectedTenantId && tenantId !== expectedTenantId) return "invalid";
+  if (checkout.mode !== "subscription" || checkout.status !== "complete" || !checkout.subscription) return "invalid";
 
   const stripe = requireStripe();
   const subscriptionId = idOf(checkout.subscription)!;
   const tenant = await getTenantBilling(tenantId);
-  if (!tenant) return false;
+  if (!tenant) return "invalid";
+  // El cliente del checkout debe ser el del taller (siempre se crea uno por taller antes de pagar).
+  if (tenant.stripe_customer_id && idOf(checkout.customer) !== tenant.stripe_customer_id) {
+    console.error(`Checkout ${checkout.id} con un cliente distinto al del taller ${tenantId}.`);
+    return "invalid";
+  }
 
   if (tenant.stripe_subscription_id && tenant.stripe_subscription_id !== subscriptionId) {
     const current = await stripe.subscriptions.retrieve(tenant.stripe_subscription_id).catch(() => null);
@@ -188,30 +205,66 @@ export async function syncCheckoutSession(checkout: Stripe.Checkout.Session, exp
             "Revisa en Stripe si hay que reembolsar el cobro.",
         );
       }
-      return false;
+      return "duplicate";
     }
   }
 
-  await syncSubscriptionById(subscriptionId, { claim: true });
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+  await syncSubscription(subscription, { claim: true });
   // Primer cobro al historial, sin esperar a invoice.paid.
   const invoiceId = idOf(checkout.invoice);
   if (invoiceId) {
-    await syncInvoiceById(invoiceId).catch((error) => console.error("Error al guardar la factura del checkout:", error));
+    await syncInvoiceById(invoiceId).catch((error) => logStripeError("Error al guardar la factura del checkout", error));
   }
-  return true;
+
+  // "no_payment_required" es el caso de pagar durante la prueba: no se cobra hoy.
+  const paid = checkout.payment_status === "paid" || checkout.payment_status === "no_payment_required";
+  return paid && (subscription.status === "active" || subscription.status === "trialing") ? "confirmed" : "pending";
 }
 
 // Al volver de Stripe con ?session_id=…: no depende de que el webhook haya llegado.
-export async function syncCheckoutSessionById(tenantId: string, checkoutSessionId: string) {
+export async function syncCheckoutSessionById(tenantId: string, checkoutSessionId: string): Promise<CheckoutOutcome> {
   const stripe = getStripe();
-  if (!stripe || !/^cs_[A-Za-z0-9_]+$/.test(checkoutSessionId)) return false;
+  if (!stripe || !/^cs_[A-Za-z0-9_]+$/.test(checkoutSessionId)) return "invalid";
   try {
     const checkout = await stripe.checkout.sessions.retrieve(checkoutSessionId);
     return await syncCheckoutSession(checkout, tenantId);
   } catch (error) {
-    console.error("Error al confirmar el pago con Stripe:", error);
-    return false;
+    logStripeError("Error al confirmar el pago con Stripe", error);
+    return "pending";
   }
+}
+
+// Registra un error de Stripe con sus ids, sin mostrarlo al usuario.
+export function logStripeError(context: string, error: unknown) {
+  if (error instanceof StripeLib.errors.StripeError) {
+    console.error(`${context}:`, {
+      type: error.type,
+      code: error.code,
+      requestId: error.requestId,
+      statusCode: error.statusCode,
+      message: error.message,
+    });
+  } else {
+    console.error(`${context}:`, error);
+  }
+}
+
+// Evita dos operaciones de cobro a la vez en el mismo taller (doble clic, dos pestañas).
+// El candado de Postgres se suelta al terminar la transacción.
+async function withBillingLock<T>(tenantId: string, callback: () => Promise<T>) {
+  return withTransaction(async (client) => {
+    const { rows } = await client.query<{ locked: boolean }>(
+      "SELECT pg_try_advisory_xact_lock(hashtextextended($1, 0)) AS locked",
+      [`billing:${tenantId}`],
+    );
+    if (!rows[0]?.locked) throw new BillingError("Ya hay un cambio de plan en proceso. Espera unos segundos.");
+    return callback();
+  });
+}
+
+function hashKey(value: string) {
+  return createHash("sha256").update(value).digest("hex").slice(0, 32);
 }
 
 // El cliente de Stripe del taller; se crea (una sola vez) antes del primer checkout.
@@ -221,7 +274,7 @@ async function ensureCustomer(stripe: Stripe, tenantId: string, tenant: TenantBi
   // La llave de idempotencia evita dos clientes si se hace doble clic.
   const customer = await stripe.customers.create(
     { email, name: tenant.name, metadata: { tenantId } },
-    { idempotencyKey: `cellfix-customer-${tenantId}` },
+    { idempotencyKey: `cellfix-customer-${tenantId}-${hashKey(email)}` },
   );
   const { rows } = await db.query<{ stripe_customer_id: string }>(
     `UPDATE tenants SET stripe_customer_id = COALESCE(stripe_customer_id, $2)
@@ -233,6 +286,7 @@ async function ensureCustomer(stripe: Stripe, tenantId: string, tenant: TenantBi
 
 type PlanItem = { productId: string; name: string; unitAmount: number };
 
+// Conceptos del plan con los precios vigentes en la base (se leen en cada petición).
 async function planItems(stripe: Stripe, modules: ModuleKey[]) {
   const pricing = await getPublicPricing();
   const items: PlanItem[] = [
@@ -258,6 +312,15 @@ function priceData(currency: string, item: PlanItem) {
   };
 }
 
+function assertMinimum(totalCents: number, currency: string) {
+  const minimum = minimumChargeCents(currency);
+  if (totalCents < minimum) {
+    throw new BillingError(
+      `El total mensual debe ser de al menos ${formatCents(minimum, currency)} para poder cobrarlo con tarjeta.`,
+    );
+  }
+}
+
 // Crea la sesión de Stripe Checkout para suscribirse con la base y los módulos elegidos.
 // Devuelve la URL a la que hay que mandar al usuario: el pago o, si en Stripe ya existe una
 // suscripción viva del taller, de vuelta a la página de suscripción (ya sincronizada).
@@ -268,91 +331,201 @@ export async function createCheckoutUrl(input: {
   baseUrl: string;
 }) {
   const stripe = requireStripe();
-  const tenant = await getTenantBilling(input.tenantId);
-  if (!tenant) throw new BillingError("No encontramos el taller.");
-  if (hasLiveSubscription({ status: tenant.subscription_status, stripeSubscriptionId: tenant.stripe_subscription_id })) {
-    throw new BillingError("Tu taller ya tiene una suscripción activa.");
-  }
+  return withBillingLock(input.tenantId, async () => {
+    const tenant = await getTenantBilling(input.tenantId);
+    if (!tenant) throw new BillingError("No encontramos el taller.");
+    if (hasLiveSubscription({ status: tenant.subscription_status, stripeSubscriptionId: tenant.stripe_subscription_id })) {
+      throw new BillingError("Tu taller ya tiene una suscripción activa.");
+    }
 
-  const billingUrl = `${input.baseUrl}/dashboard/suscripcion`;
-  const customerId = await ensureCustomer(stripe, input.tenantId, tenant, input.email);
+    const billingUrl = `${input.baseUrl}/dashboard/suscripcion`;
+    const customerId = await ensureCustomer(stripe, input.tenantId, tenant, input.email);
 
-  // Una suscripción viva en Stripe que la base no refleja (webhook perdido): se liga y no se cobra de nuevo.
-  const existing = await stripe.subscriptions.list({ customer: customerId, status: "all", limit: 20 });
-  const live = existing.data.find(isLive);
-  if (live) {
-    await syncSubscription(live, { claim: true });
-    return billingUrl;
-  }
+    // Una suscripción viva en Stripe que la base no refleja (webhook perdido): se liga y no se cobra de nuevo.
+    const existing = await stripe.subscriptions.list({ customer: customerId, status: "all", limit: 20 });
+    const live = existing.data.find(isLive);
+    if (live) {
+      await syncSubscription(live, { claim: true });
+      return billingUrl;
+    }
 
-  const modules = normalizeModules(input.modules);
-  const { currency, items } = await planItems(stripe, modules);
-  const metadata = { tenantId: input.tenantId, modules: modules.join(",") };
+    const modules = normalizeModules(input.modules);
+    const { currency, items } = await planItems(stripe, modules);
+    assertMinimum(
+      items.reduce((sum, item) => sum + item.unitAmount, 0),
+      currency,
+    );
 
-  // Si paga durante la prueba, no pierde los días que le quedan: el primer cobro es al terminar.
-  // Stripe exige que el fin de la prueba sea al menos 48 horas después.
-  const trialEnd =
-    tenant.subscription_status === "trialing" &&
-    tenant.trial_ends_at &&
-    tenant.trial_ends_at.getTime() - Date.now() > 49 * 60 * 60 * 1000
-      ? Math.floor(tenant.trial_ends_at.getTime() / 1000)
-      : undefined;
+    const metadata = { tenantId: input.tenantId, modules: modules.join(",") };
+    const trial = checkoutTrial({ status: tenant.subscription_status, trialEndsAt: tenant.trial_ends_at });
 
-  const checkout = await stripe.checkout.sessions.create({
-    mode: "subscription",
-    line_items: items.map((item) => ({ price_data: priceData(currency, item), quantity: 1 })),
-    client_reference_id: input.tenantId,
-    metadata,
-    subscription_data: { metadata, trial_end: trialEnd },
-    customer: customerId,
-    locale: "es-419",
-    success_url: `${billingUrl}?pagado=1&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: billingUrl,
+    const params: Stripe.Checkout.SessionCreateParams = {
+      mode: "subscription",
+      line_items: items.map((item) => ({ price_data: priceData(currency, item), quantity: 1 })),
+      client_reference_id: input.tenantId,
+      metadata,
+      subscription_data: {
+        metadata,
+        ...(trial?.trialEnd ? { trial_end: trial.trialEnd } : {}),
+        ...(trial?.trialPeriodDays ? { trial_period_days: trial.trialPeriodDays } : {}),
+      },
+      customer: customerId,
+      locale: "es-419",
+      success_url: `${billingUrl}?pagado=1&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${billingUrl}?cancelado=1`,
+    };
+
+    // Mismos datos en la misma ventana de 10 minutos = la misma sesión (doble clic, reintentos).
+    const timeWindow = Math.floor(Date.now() / (10 * 60 * 1000));
+    const checkout = await stripe.checkout.sessions.create(params, {
+      idempotencyKey: `cellfix-checkout-${input.tenantId}-${timeWindow}-${hashKey(JSON.stringify(params))}`,
+    });
+
+    if (!checkout.url) throw new BillingError("Stripe no devolvió la página de pago.");
+    return checkout.url;
   });
-
-  if (!checkout.url) throw new BillingError("Stripe no devolvió la página de pago.");
-  return checkout.url;
 }
 
-// Cambia los módulos de una suscripción vigente. Stripe prorratea: lo que se agrega se cobra
-// en la siguiente factura por los días que falten y lo que se quita se abona.
-// Los renglones que se quedan conservan su precio; los precios nuevos aplican a lo que se agrega.
-export async function updateSubscriptionModules(tenantId: string, requested: ModuleKey[]) {
-  const stripe = requireStripe();
+// Renglones a quitar y agregar para dejar la suscripción con los módulos pedidos. Valida
+// moneda, cambios vacíos y el cargo mínimo del nuevo total.
+async function moduleChanges(stripe: Stripe, subscription: Stripe.Subscription, requested: ModuleKey[]) {
+  const modules = normalizeModules(requested);
+  const { currency, items } = await planItems(stripe, modules);
+  if (subscription.currency !== currency) {
+    console.error(
+      `Suscripción ${subscription.id} en ${subscription.currency} y precios de la plataforma en ${currency}: ` +
+        "no se mezclan monedas; ajusta el plan desde Stripe.",
+    );
+    throw new BillingError(
+      `Tu suscripción se cobra en ${subscription.currency.toUpperCase()} y los precios actuales están en ${currency.toUpperCase()}. Escríbenos para ajustar tu plan.`,
+    );
+  }
+
+  const wanted = new Set(items.map((item) => item.productId));
+  const existing = new Map(subscription.items.data.map((item) => [productIdOf(item), item]));
+  const removed = subscription.items.data.filter((item) => {
+    const productId = productIdOf(item);
+    return (productId === BASE_PRODUCT_ID || moduleFromProductId(productId)) && !wanted.has(productId);
+  });
+  const added = items.filter((item) => !existing.has(item.productId));
+  if (removed.length === 0 && added.length === 0) throw new BillingError("Tu plan ya tiene esos módulos.");
+
+  // Lo que queda conserva su precio; lo nuevo entra al precio actual.
+  const kept = subscription.items.data.filter((item) => !removed.includes(item));
+  const monthlyTotalCents =
+    kept.reduce((sum, item) => sum + (item.price.unit_amount ?? 0) * (item.quantity ?? 1), 0) +
+    added.reduce((sum, item) => sum + item.unitAmount, 0);
+  assertMinimum(monthlyTotalCents, currency);
+
+  return {
+    modules,
+    currency,
+    monthlyTotalCents,
+    items: [
+      ...removed.map((item) => ({ id: item.id, deleted: true as const })),
+      ...added.map((item) => ({ price_data: priceData(currency, item), quantity: 1 })),
+    ],
+  };
+}
+
+async function liveSubscriptionOf(stripe: Stripe, tenantId: string) {
   const tenant = await getTenantBilling(tenantId);
   if (
     !tenant?.stripe_subscription_id ||
+    !tenant.stripe_customer_id ||
     !hasLiveSubscription({ status: tenant.subscription_status, stripeSubscriptionId: tenant.stripe_subscription_id })
   ) {
     throw new BillingError("Tu taller no tiene una suscripción activa.");
   }
-
-  const modules = normalizeModules(requested);
   const subscription = await stripe.subscriptions.retrieve(tenant.stripe_subscription_id);
-  const { currency, items } = await planItems(stripe, modules);
-  const wanted = new Set(items.map((item) => item.productId));
-  const existing = new Map(subscription.items.data.map((item) => [productIdOf(item), item]));
+  if (!isLive(subscription)) throw new BillingError("Tu suscripción ya no está activa. Recarga la página.");
+  return { subscription, customerId: tenant.stripe_customer_id };
+}
 
-  const changes = [
-    // Quita lo que ya no eligió (solo productos de CellFix).
-    ...subscription.items.data
-      .filter((item) => {
-        const productId = productIdOf(item);
-        return (productId === BASE_PRODUCT_ID || moduleFromProductId(productId)) && !wanted.has(productId);
-      })
-      .map((item) => ({ id: item.id, deleted: true as const })),
-    // Agrega lo nuevo con el precio actual.
-    ...items.filter((item) => !existing.has(item.productId)).map((item) => ({ price_data: priceData(currency, item), quantity: 1 })),
-  ];
+function currentPeriodEnd(subscription: Stripe.Subscription) {
+  const ends = subscription.items.data.map((item) => item.current_period_end);
+  return ends.length > 0 ? new Date(Math.max(...ends) * 1000) : null;
+}
 
-  if (changes.length === 0) return;
+// Próximo cobro: fin de la prueba de Stripe si la hay; si no, fin del periodo actual.
+function nextChargeDate(subscription: Stripe.Subscription) {
+  if (subscription.status === "trialing" && subscription.trial_end) return new Date(subscription.trial_end * 1000);
+  return currentPeriodEnd(subscription);
+}
 
-  const updated = await stripe.subscriptions.update(subscription.id, {
-    items: changes,
-    metadata: { tenantId, modules: modules.join(",") },
-    proration_behavior: "create_prorations",
+export type ModuleChangePreview = {
+  modules: ModuleKey[];
+  currency: string;
+  // Ajuste prorrateado por los días que faltan (positivo: se cobra; negativo: saldo a favor).
+  prorationCents: number;
+  // Próxima factura con el cambio incluido y su fecha (ISO).
+  nextInvoiceCents: number;
+  nextChargeAt: string | null;
+  // Nuevo total mensual a partir del siguiente periodo.
+  monthlyTotalCents: number;
+  // Fecha de prorrateo (segundos) que se usa al confirmar, para cobrar lo mismo que se mostró.
+  prorationDate: number;
+};
+
+// Vista previa del cambio de módulos con la factura que Stripe generaría.
+export async function previewModuleChange(tenantId: string, requested: ModuleKey[]): Promise<ModuleChangePreview> {
+  const stripe = requireStripe();
+  const { subscription, customerId } = await liveSubscriptionOf(stripe, tenantId);
+  const change = await moduleChanges(stripe, subscription, requested);
+  const prorationDate = Math.floor(Date.now() / 1000);
+
+  const preview = await stripe.invoices.createPreview({
+    customer: customerId,
+    subscription: subscription.id,
+    subscription_details: { items: change.items, proration_behavior: "create_prorations", proration_date: prorationDate },
   });
-  await syncSubscription(updated);
+  const prorationCents = preview.lines.data
+    .filter((line) => line.parent?.subscription_item_details?.proration)
+    .reduce((sum, line) => sum + line.amount, 0);
+
+  return {
+    modules: change.modules,
+    currency: change.currency,
+    prorationCents,
+    nextInvoiceCents: preview.amount_due,
+    nextChargeAt: nextChargeDate(subscription)?.toISOString() ?? null,
+    monthlyTotalCents: change.monthlyTotalCents,
+    prorationDate,
+  };
+}
+
+// Cambia los módulos de una suscripción vigente. Stripe prorratea: lo que se agrega se cobra
+// en la siguiente factura por los días que faltan y lo que se quita se abona.
+// Los renglones que se quedan conservan su precio; los precios nuevos aplican a lo que se agrega.
+export async function updateSubscriptionModules(tenantId: string, requested: ModuleKey[], prorationDate?: number) {
+  const stripe = requireStripe();
+  await withBillingLock(tenantId, async () => {
+    const { subscription } = await liveSubscriptionOf(stripe, tenantId);
+    const change = await moduleChanges(stripe, subscription, requested);
+    // La fecha de la vista previa solo se acepta si es reciente (y nunca futura).
+    const now = Math.floor(Date.now() / 1000);
+    const validDate = prorationDate && prorationDate <= now && now - prorationDate <= 30 * 60 ? prorationDate : now;
+
+    const updated = await stripe.subscriptions.update(
+      subscription.id,
+      {
+        items: change.items,
+        metadata: { tenantId, modules: change.modules.join(",") },
+        proration_behavior: "create_prorations",
+        proration_date: validDate,
+      },
+      { idempotencyKey: `cellfix-modules-${subscription.id}-${validDate}-${change.modules.join(",")}` },
+    );
+    await syncSubscription(updated);
+  });
+}
+
+function billedModulesOf(subscription: Stripe.Subscription) {
+  return normalizeModules(
+    subscription.items.data
+      .map((item) => moduleFromProductId(productIdOf(item)))
+      .filter((key): key is string => key !== null),
+  );
 }
 
 // Módulos que cobra hoy la suscripción vigente (sin la regla de la prueba), para decidir qué
@@ -362,11 +535,84 @@ export async function getBilledModules(tenantId: string) {
   const tenant = await getTenantBilling(tenantId);
   if (!tenant?.stripe_subscription_id) return [];
   const subscription = await stripe.subscriptions.retrieve(tenant.stripe_subscription_id);
-  return normalizeModules(
-    subscription.items.data
-      .map((item) => moduleFromProductId(productIdOf(item)))
-      .filter((key): key is string => key !== null),
-  );
+  return billedModulesOf(subscription);
+}
+
+export type LiveSubscriptionDetails = {
+  stripeStatus: Stripe.Subscription.Status;
+  currency: string;
+  billedModules: ModuleKey[];
+  monthlyTotalCents: number;
+  // Prueba de Stripe (pagó antes de que terminara la prueba gratuita).
+  trialEndsAt: Date | null;
+  // Cancelación programada: la suscripción termina en esta fecha y no se vuelve a cobrar.
+  endsAt: Date | null;
+  nextCharge: { at: Date; amountCents: number } | null;
+  paymentMethod: { brand: string; last4: string } | null;
+};
+
+function cardOf(value: string | Stripe.PaymentMethod | null | undefined) {
+  if (!value || typeof value === "string" || !value.card) return null;
+  return { brand: value.card.brand, last4: value.card.last4 };
+}
+
+// Lo que Stripe sabe hoy de la suscripción del taller: módulos cobrados, total, próximo cobro,
+// tarjeta y cancelación programada. null si no hay suscripción viva o Stripe no responde.
+export async function getLiveSubscriptionDetails(tenantId: string): Promise<LiveSubscriptionDetails | null> {
+  const stripe = getStripe();
+  if (!stripe) return null;
+  const tenant = await getTenantBilling(tenantId);
+  if (!tenant?.stripe_subscription_id) return null;
+
+  try {
+    const subscription = await stripe.subscriptions.retrieve(tenant.stripe_subscription_id, {
+      expand: ["default_payment_method", "customer.invoice_settings.default_payment_method"],
+    });
+    if (!isLive(subscription)) return null;
+
+    const customer =
+      typeof subscription.customer === "object" && !subscription.customer.deleted ? subscription.customer : null;
+    const paymentMethod =
+      cardOf(subscription.default_payment_method) ?? cardOf(customer?.invoice_settings?.default_payment_method);
+
+    const endsAt = subscription.cancel_at
+      ? new Date(subscription.cancel_at * 1000)
+      : subscription.cancel_at_period_end
+        ? currentPeriodEnd(subscription)
+        : null;
+    const trialEndsAt =
+      subscription.status === "trialing" && subscription.trial_end ? new Date(subscription.trial_end * 1000) : null;
+    const monthlyTotalCents = subscription.items.data.reduce(
+      (sum, item) => sum + (item.price.unit_amount ?? 0) * (item.quantity ?? 1),
+      0,
+    );
+
+    let nextCharge: LiveSubscriptionDetails["nextCharge"] = null;
+    const nextAt = nextChargeDate(subscription);
+    if (!endsAt && nextAt) {
+      const preview = await stripe.invoices
+        .createPreview({ customer: idOf(subscription.customer)!, subscription: subscription.id })
+        .catch((error: unknown) => {
+          logStripeError("No pudimos calcular el próximo cobro", error);
+          return null;
+        });
+      nextCharge = { at: nextAt, amountCents: preview?.amount_due ?? monthlyTotalCents };
+    }
+
+    return {
+      stripeStatus: subscription.status,
+      currency: subscription.currency,
+      billedModules: billedModulesOf(subscription),
+      monthlyTotalCents,
+      trialEndsAt,
+      endsAt,
+      nextCharge,
+      paymentMethod,
+    };
+  } catch (error) {
+    logStripeError("No pudimos consultar la suscripción en Stripe", error);
+    return null;
+  }
 }
 
 // Portal de Stripe para cambiar la tarjeta, ver facturas o cancelar.
@@ -383,6 +629,7 @@ export async function getTenantSubscription(tenantId: string) {
   const row = await getTenantBilling(tenantId);
   return {
     status: row?.subscription_status ?? "active",
+    trialEndsAt: row?.trial_ends_at ?? null,
     stripeCustomerId: row?.stripe_customer_id ?? null,
     stripeSubscriptionId: row?.stripe_subscription_id ?? null,
   };
