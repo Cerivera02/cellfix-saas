@@ -20,8 +20,16 @@ function Stat({ label, value, href }: { label: string; value: number; href: stri
   );
 }
 
-export default async function DashboardPage() {
+// Avisos al regresar al inicio desde una sección a la que no se pudo entrar.
+const NOTICES: Record<string, string> = {
+  "sin-permiso": "No tienes permiso para entrar a esa sección. Si la necesitas, pídele al propietario del taller que te la asigne.",
+  "modulo-inactivo": "Esa sección no está activa en tu taller.",
+};
+
+export default async function DashboardPage(props: PageProps<"/dashboard">) {
   const session = await requireTenantSession();
+  const { aviso } = await props.searchParams;
+  const notice = typeof aviso === "string" ? NOTICES[aviso] : undefined;
   const firstName = session.user.name.split(" ")[0];
   const canSeeOrders = ORDER_ACCESS_PERMISSIONS.some((permission) => session.permissions.includes(permission));
   const isTechnician = session.permissions.includes("repairs.work");
@@ -29,6 +37,11 @@ export default async function DashboardPage() {
 
   return (
     <>
+      {notice && (
+        <p role="status" className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {notice}
+        </p>
+      )}
       <h1 className="text-2xl font-semibold tracking-tight">Hola, {firstName}</h1>
       <p className="mt-2 text-sm text-zinc-600">
         Estás en <span className="font-medium text-zinc-900">{session.tenant.name}</span>

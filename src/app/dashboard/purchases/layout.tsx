@@ -6,6 +6,6 @@ import { hasModule } from "@/lib/modules";
 // inventory.view deja consultar compras, pero solo si el módulo de Compras está activo.
 export default async function PurchasesLayout({ children }: LayoutProps<"/dashboard/purchases">) {
   const session = await requireAnyTenantPermission(["purchases.manage", "inventory.view"]);
-  if (!hasModule(session.modules, "purchases")) redirect("/dashboard");
+  if (!hasModule(session.modules, "purchases")) redirect("/dashboard?aviso=modulo-inactivo");
   return children;
 }

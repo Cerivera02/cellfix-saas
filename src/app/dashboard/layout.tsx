@@ -3,6 +3,7 @@ import { AppShell } from "@/components/shell/app-shell";
 import type { NavItem, NavLink } from "@/components/shell/sidebar";
 import { BILLING_PATH, canManageBilling, requireTenantSession } from "@/lib/auth/session";
 import { CUSTOMER_ACCESS_PERMISSIONS } from "@/lib/customers/access";
+import { hasModule } from "@/lib/modules";
 import { ORDER_ACCESS_PERMISSIONS } from "@/lib/orders/labels";
 import type { Permission } from "@/lib/permissions";
 
@@ -65,7 +66,8 @@ export default async function DashboardLayout({ children }: LayoutProps<"/dashbo
       { href: "/dashboard/inventory/suppliers", label: "Proveedores" },
     );
   }
-  if (can("inventory.view") || can("purchases.manage")) {
+  // inventory.view deja consultar compras, pero solo con el módulo de Compras activo.
+  if (hasModule(session.modules, "purchases") && (can("inventory.view") || can("purchases.manage"))) {
     inventoryLinks.push({ href: "/dashboard/purchases", label: "Compras", activePrefix: "/dashboard/purchases/" });
   }
   if (inventoryLinks.length > 0) {

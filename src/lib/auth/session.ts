@@ -182,17 +182,20 @@ export function canManageBilling(session: TenantSession) {
   return session.isOwner || session.rolePermissions.includes("settings.manage");
 }
 
+// A dónde se manda a quien entra a una sección sin permiso; el inicio muestra el aviso.
+export const NO_PERMISSION_PATH = "/dashboard?aviso=sin-permiso";
+
 // Igual que requireTenantSession, pero exige un permiso concreto.
 export async function requireTenantPermission(permission: Permission) {
   const session = await requireTenantSession();
-  if (!session.permissions.includes(permission)) redirect("/dashboard");
+  if (!session.permissions.includes(permission)) redirect(NO_PERMISSION_PATH);
   return session;
 }
 
 // Exige al menos uno de los permisos.
 export async function requireAnyTenantPermission(permissions: Permission[]) {
   const session = await requireTenantSession();
-  if (!permissions.some((permission) => session.permissions.includes(permission))) redirect("/dashboard");
+  if (!permissions.some((permission) => session.permissions.includes(permission))) redirect(NO_PERMISSION_PATH);
   return session;
 }
 
