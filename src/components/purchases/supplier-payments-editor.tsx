@@ -52,6 +52,7 @@ export function SupplierPaymentsEditor({
               <Select
                 id={`${id}-method-${row.key}`}
                 options={PAYMENT_METHODS.map((method) => ({ value: method, label: PAYMENT_METHOD_LABELS[method] }))}
+                placeholder="Elige el método de pago"
                 defaultValue={row.method}
                 onChange={(value) =>
                   value &&
@@ -114,6 +115,7 @@ export function SupplierPaymentsEditor({
                   type="text"
                   autoComplete="off"
                   maxLength={60}
+                  placeholder="Folio o clave de rastreo"
                   value={row.reference}
                   onChange={(event) => update(row.key, { reference: event.target.value })}
                   className={inputClass}

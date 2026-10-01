@@ -86,6 +86,7 @@ function ReturnForm({ action, lines, onDone }: { action: Action; lines: ReturnLi
                     name={`qty-${line.id}`}
                     max={remaining}
                     aria-label={`Piezas de ${line.itemName} a devolver`}
+                    placeholder="0"
                     value={String(quantities[line.id] ?? 0)}
                     onChange={(value) =>
                       setQuantities((current) => ({
@@ -110,6 +111,7 @@ function ReturnForm({ action, lines, onDone }: { action: Action; lines: ReturnLi
             id={`${id}-method`}
             name="refundMethod"
             options={PAYMENT_METHODS.map((method) => ({ value: method, label: PAYMENT_METHOD_LABELS[method] }))}
+            placeholder="Elige cómo reembolsar"
             defaultValue={state?.fields?.refundMethod || "cash"}
           />
         </Field>
@@ -126,6 +128,7 @@ function ReturnForm({ action, lines, onDone }: { action: Action; lines: ReturnLi
           type="text"
           autoComplete="off"
           maxLength={300}
+          placeholder="La pieza no era compatible con su equipo"
           defaultValue={state?.fields?.reason}
           className={inputClass}
         />

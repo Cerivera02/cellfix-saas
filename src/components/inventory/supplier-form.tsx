@@ -39,6 +39,7 @@ export function SupplierForm({
               autoComplete="off"
               required
               maxLength={120}
+              placeholder="Refacciones del Centro"
               defaultValue={value("name")}
               className={inputClass}
             />
@@ -52,6 +53,7 @@ export function SupplierForm({
             type="text"
             autoComplete="off"
             maxLength={120}
+            placeholder="Juan Pérez"
             defaultValue={value("contactName")}
             className={inputClass}
           />
@@ -64,6 +66,7 @@ export function SupplierForm({
             type="tel"
             autoComplete="off"
             maxLength={30}
+            placeholder="55 1234 5678"
             defaultValue={value("phone")}
             className={inputClass}
           />
@@ -76,6 +79,7 @@ export function SupplierForm({
             type="email"
             autoComplete="off"
             maxLength={200}
+            placeholder="ventas@proveedor.com"
             defaultValue={value("email")}
             className={inputClass}
           />
@@ -88,6 +92,7 @@ export function SupplierForm({
             type="text"
             autoComplete="off"
             maxLength={20}
+            placeholder="RDC120315AB1"
             defaultValue={value("taxId")}
             className={`${inputClass} font-mono uppercase`}
           />
@@ -100,6 +105,7 @@ export function SupplierForm({
               name="address"
               rows={2}
               maxLength={300}
+              placeholder="Av. Juárez 123, Col. Centro, CDMX"
               defaultValue={value("address")}
               className={`${inputClass} resize-y`}
             />
@@ -113,6 +119,7 @@ export function SupplierForm({
               name="notes"
               rows={3}
               maxLength={1000}
+              placeholder="Entrega en 2 días; pago a 15 días"
               defaultValue={value("notes")}
               className={`${inputClass} resize-y`}
             />

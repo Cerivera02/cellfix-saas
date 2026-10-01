@@ -83,6 +83,7 @@ export function UnlockFields({
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
+          placeholder="Casa2024"
           aria-label="Contraseña"
           maxLength={60}
           value={code}

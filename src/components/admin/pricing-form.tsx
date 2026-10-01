@@ -32,7 +32,7 @@ export function PricingForm({
       <fieldset className="grid gap-4 sm:grid-cols-2">
         <legend className="mb-3 text-sm font-medium text-zinc-900">Prueba gratuita</legend>
         <Field label="Días de prueba" name="trialDays" error={errors?.trialDays} hint="Con todos los módulos activos.">
-          <IntegerInput id="trialDays" name="trialDays" defaultValue={value("trialDays", defaults.trialDays)} />
+          <IntegerInput id="trialDays" name="trialDays" placeholder="30" defaultValue={value("trialDays", defaults.trialDays)} />
         </Field>
         <Field
           label="Días de gracia"
@@ -40,7 +40,7 @@ export function PricingForm({
           error={errors?.graceDays}
           hint="Uso normal con aviso; después se bloquea."
         >
-          <IntegerInput id="graceDays" name="graceDays" defaultValue={value("graceDays", defaults.graceDays)} />
+          <IntegerInput id="graceDays" name="graceDays" placeholder="7" defaultValue={value("graceDays", defaults.graceDays)} />
         </Field>
       </fieldset>
 

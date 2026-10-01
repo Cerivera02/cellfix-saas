@@ -130,14 +130,15 @@ export function TicketSettingsForm({
               name="address"
               rows={2}
               maxLength={TICKET_LIMITS.address}
+              placeholder="Ej. Av. Juárez 123, Col. Centro, CDMX"
               value={values.address}
               onChange={(event) => set("address", event.target.value)}
               className={inputClass}
             />
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
-            {textInput("phone", "Teléfono")}
-            {textInput("taxId", "RFC", { hint: "Opcional." })}
+            {textInput("phone", "Teléfono", { placeholder: "Ej. 55 1234 5678" })}
+            {textInput("taxId", "RFC", { hint: "Opcional.", placeholder: "Ej. LOGM850101AB1" })}
           </div>
         </section>
 
@@ -170,6 +171,7 @@ export function TicketSettingsForm({
             <Select
               id="ticket-paperWidth"
               name="paperWidth"
+              placeholder="Elige el ancho…"
               options={PAPER_OPTIONS}
               defaultValue={values.paperWidth}
               invalid={Boolean(errors?.paperWidth)}

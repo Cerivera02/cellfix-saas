@@ -84,7 +84,7 @@ export default async function OrdersPage(props: PageProps<"/dashboard/orders">) 
             name="q"
             type="search"
             defaultValue={search}
-            placeholder="Folio, cliente, teléfono, IMEI o modelo"
+            placeholder="Buscar por folio, cliente, teléfono, IMEI o modelo"
             aria-label="Buscar órdenes"
             className={inputClass}
           />

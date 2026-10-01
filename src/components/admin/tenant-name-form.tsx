@@ -23,6 +23,7 @@ export function TenantNameForm({
           type="text"
           autoComplete="off"
           required
+          placeholder="Ej. Reparación Chávez"
           defaultValue={state?.fields?.name ?? defaultName}
           className={inputClass}
         />

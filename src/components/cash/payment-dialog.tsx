@@ -170,6 +170,7 @@ export function PaymentRowsFields({
                 <Select
                   id={`${id}-method-${row.key}`}
                   options={methodOptions}
+                  placeholder="Elige el método de pago"
                   defaultValue={row.method}
                   onChange={(value) => {
                     if (value) state.setMethod(row, value as PaymentMethod);
@@ -220,6 +221,7 @@ export function PaymentRowsFields({
                       type="text"
                       autoComplete="off"
                       maxLength={60}
+                      placeholder="Folio o clave de rastreo"
                       value={row.reference}
                       onChange={(event) => updateRow(row.key, { reference: event.target.value })}
                       className={inputClass}
@@ -248,6 +250,7 @@ export function PaymentRowsFields({
                     type="text"
                     autoComplete="off"
                     maxLength={60}
+                    placeholder="Últimos 4 dígitos o autorización"
                     value={row.reference}
                     onChange={(event) => updateRow(row.key, { reference: event.target.value })}
                     className={inputClass}

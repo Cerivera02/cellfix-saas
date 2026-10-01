@@ -93,6 +93,7 @@ export function PriceTaxFields({
             id={`${id}-tax`}
             name="taxRate"
             options={LABOR_TAX_RATES.map((rate) => ({ value: rate, label: rate === "0" ? "Sin IVA" : `${rate}%` }))}
+            placeholder="Elige la tasa de IVA"
             defaultValue={taxRate}
             onChange={(value) => setTaxRate(value ?? "16")}
           />

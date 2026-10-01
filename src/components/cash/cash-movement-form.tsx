@@ -19,7 +19,7 @@ export function CashMovementForm({ action }: { action: (state: FormState, formDa
   return (
     <form action={formAction} className="flex flex-col gap-3" noValidate>
       <Field label="Tipo" name={`${id}-kind`} error={state?.errors?.kind}>
-        <Select id={`${id}-kind`} name="kind" options={KIND_OPTIONS} defaultValue="out" />
+        <Select id={`${id}-kind`} name="kind" options={KIND_OPTIONS} placeholder="Elige el tipo de movimiento" defaultValue="out" />
       </Field>
       <Field label="Importe" name={`${id}-amount`} error={state?.errors?.amount}>
         <MoneyInput id={`${id}-amount`} name="amount" defaultValue={state?.success ? undefined : state?.fields?.amount} />
@@ -31,6 +31,7 @@ export function CashMovementForm({ action }: { action: (state: FormState, formDa
           type="text"
           autoComplete="off"
           maxLength={200}
+          placeholder="Pago de garrafón"
           defaultValue={state?.success ? undefined : state?.fields?.reason}
           className={inputClass}
         />

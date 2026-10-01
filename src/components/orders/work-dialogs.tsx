@@ -74,6 +74,7 @@ function DiagnosisForm({
           name="diagnosis"
           rows={4}
           maxLength={2000}
+          placeholder="Centro de carga dañado; se propone cambiarlo"
           defaultValue={value("diagnosis")}
           className={`${inputClass} resize-y`}
         />
@@ -129,7 +130,7 @@ function StatusForm({ action, current, onDone }: { action: Action; current: Orde
   return (
     <form action={formAction} className="flex flex-col gap-4" noValidate>
       <Field label="Nuevo estado" name={`${id}-status`} error={state?.errors?.status}>
-        <Select id={`${id}-status`} name="status" options={options} defaultValue={status} onChange={(value) => setStatus(value ?? "")} />
+        <Select id={`${id}-status`} name="status" options={options} placeholder="Elige el nuevo estado" defaultValue={status} onChange={(value) => setStatus(value ?? "")} />
       </Field>
 
       {status === "ready" && (
@@ -163,6 +164,7 @@ function StatusForm({ action, current, onDone }: { action: Action; current: Orde
           type="text"
           autoComplete="off"
           maxLength={500}
+          placeholder="Se pidió la pantalla al proveedor"
           defaultValue={state?.fields?.note}
           className={inputClass}
         />
@@ -214,12 +216,13 @@ function PartForm({ action, onDone }: { action: Action; onDone: () => void }) {
     <form action={formAction} className="flex flex-col gap-4" noValidate>
       <input type="hidden" name="itemId" value={part?.value ?? ""} />
       <Field label="Refacción" name={`${id}-item`} error={state?.errors?.itemId}>
-        <AsyncSelect id={`${id}-item`} value={part} onChange={choosePart} loadOptions={loadParts} placeholder="Nombre o código de barras" />
+        <AsyncSelect id={`${id}-item`} value={part} onChange={choosePart} loadOptions={loadParts} placeholder="Busca por nombre o código de barras" />
       </Field>
       <Field label="Cantidad" name={`${id}-quantity`} error={state?.errors?.quantity}>
         <IntegerInput
           id={`${id}-quantity`}
           name="quantity"
+          placeholder="1"
           max={Math.max(max, 1)}
           value={quantity}
           onChange={(value) => setQuantity(clampQuantity(value, max))}
@@ -294,6 +297,7 @@ function FreePartForm({ action, showPrices, onDone }: { action: Action; showPric
         <IntegerInput
           id={`${id}-quantity`}
           name="quantity"
+          placeholder="1"
           max={MAX_QUANTITY}
           value={quantity}
           onChange={setQuantity}

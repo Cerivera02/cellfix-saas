@@ -36,6 +36,7 @@ export function SetPasswordForm({
           type="password"
           autoComplete="new-password"
           required
+          placeholder="Mínimo 8 caracteres"
           minLength={8}
           className={inputClass}
         />

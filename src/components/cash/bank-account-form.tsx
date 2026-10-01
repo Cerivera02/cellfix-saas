@@ -50,6 +50,7 @@ export function BankAccountForm({
             type="text"
             autoComplete="off"
             maxLength={60}
+            placeholder="Cuenta principal"
             defaultValue={value("alias")}
             className={inputClass}
           />
@@ -63,6 +64,7 @@ export function BankAccountForm({
               type="text"
               autoComplete="off"
               maxLength={120}
+              placeholder="María López Hernández"
               defaultValue={value("holderName")}
               className={inputClass}
             />
@@ -78,6 +80,7 @@ export function BankAccountForm({
               inputMode="numeric"
               autoComplete="off"
               maxLength={24}
+              placeholder="012180001234567891"
               defaultValue={value("clabe")}
               className={`${inputClass} font-mono tracking-wide`}
             />
