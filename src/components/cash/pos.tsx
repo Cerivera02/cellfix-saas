@@ -196,6 +196,7 @@ export function Pos({ accounts }: { accounts: AccountOption[] }) {
                     <IntegerInput
                       bare
                       aria-label={`Cantidad de ${line.item.name}`}
+                      placeholder="1"
                       value={String(line.quantity)}
                       onChange={(value) => setQuantity(line.item.id, Number(value))}
                       className="h-8 w-14 rounded-lg border border-zinc-200 text-center text-sm"

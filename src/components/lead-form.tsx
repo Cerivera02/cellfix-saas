@@ -31,6 +31,7 @@ export function LeadForm() {
           type="text"
           autoComplete="name"
           required
+          placeholder="Ej. María López"
           defaultValue={fields.name}
           className={inputClass}
         />
@@ -43,6 +44,7 @@ export function LeadForm() {
           type="email"
           autoComplete="email"
           required
+          placeholder="tu@correo.com"
           defaultValue={fields.email}
           className={inputClass}
         />
@@ -55,6 +57,7 @@ export function LeadForm() {
           type="text"
           autoComplete="organization"
           required
+          placeholder="Ej. Reparaciones Díaz"
           defaultValue={fields.business}
           className={inputClass}
         />
@@ -66,6 +69,7 @@ export function LeadForm() {
           name="phone"
           type="tel"
           autoComplete="tel"
+          placeholder="Ej. 55 1234 5678"
           defaultValue={fields.phone}
           className={inputClass}
         />
@@ -77,6 +81,7 @@ export function LeadForm() {
             id="message"
             name="message"
             rows={4}
+            placeholder="¿Cuántos técnicos son? ¿Qué te gustaría resolver?"
             defaultValue={fields.message}
             className={`${inputClass} resize-none`}
           />

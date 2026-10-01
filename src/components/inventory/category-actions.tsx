@@ -42,6 +42,7 @@ function RenameCategoryForm({
           autoComplete="off"
           required
           maxLength={60}
+          placeholder="Pantallas"
           defaultValue={state?.fields?.name ?? defaultName}
           className={inputClass}
         />

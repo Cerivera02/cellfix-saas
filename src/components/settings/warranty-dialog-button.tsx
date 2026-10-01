@@ -45,7 +45,7 @@ function WarrantyForm({
           />
         </Field>
         <Field label="Días" name={`${id}-days`} error={state?.errors?.days}>
-          <IntegerInput id={`${id}-days`} name="days" maxLength={4} defaultValue={value("days")} />
+          <IntegerInput id={`${id}-days`} name="days" maxLength={4} placeholder="90" defaultValue={value("days")} />
         </Field>
       </div>
 

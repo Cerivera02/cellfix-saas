@@ -95,7 +95,7 @@ export function IntakeStockParts({ id, error }: { id: string; error?: string }) 
           value={null}
           onChange={choose}
           loadOptions={loadOptions}
-          placeholder="Nombre o código de barras"
+          placeholder="Busca por nombre o código de barras"
           invalid={Boolean(error)}
         />
       </Field>
@@ -117,6 +117,7 @@ export function IntakeStockParts({ id, error }: { id: string; error?: string }) 
               </label>
               <IntegerInput
                 id={`${id}-qty-${part.itemId}`}
+                placeholder="1"
                 max={Math.max(limitOf(part), 1)}
                 value={part.quantity}
                 onChange={(value) => setQuantity(part.itemId, value)}
@@ -166,6 +167,7 @@ export function IntakeFreePart({ id, state, showPrices }: { id: string; state: F
         <Field label="Cantidad" name={`${id}-part-quantity`} error={state?.errors?.partQuantity}>
           <IntegerInput
             id={`${id}-part-quantity`}
+            placeholder="1"
             name="partQuantity"
             max={MAX_QUANTITY}
             value={quantity}
@@ -285,7 +287,7 @@ export function IntakePartsToGet({ id, state, hasInventory }: { id: string; stat
               value={null}
               onChange={choose}
               loadOptions={loadOptions}
-              placeholder="Nombre o código de barras"
+              placeholder="Busca por nombre o código de barras"
               invalid={Boolean(error)}
             />
           </div>
@@ -343,6 +345,7 @@ export function IntakePartsToGet({ id, state, hasInventory }: { id: string; stat
               </label>
               <IntegerInput
                 id={`${id}-qty-${part.key}`}
+                placeholder="1"
                 max={MAX_QUANTITY}
                 value={part.quantity}
                 onChange={(value) => setQuantity(part.key, value)}

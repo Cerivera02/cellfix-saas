@@ -21,6 +21,7 @@ export function CreateTenantForm() {
             type="text"
             autoComplete="off"
             required
+            placeholder="Ej. Reparación Chávez"
             defaultValue={fields.name}
             className={inputClass}
           />
@@ -40,6 +41,7 @@ export function CreateTenantForm() {
             type="text"
             autoComplete="off"
             required
+            placeholder="Ej. María López"
             defaultValue={fields.ownerName}
             className={inputClass}
           />
@@ -52,6 +54,7 @@ export function CreateTenantForm() {
             type="email"
             autoComplete="off"
             required
+            placeholder="propietario@correo.com"
             defaultValue={fields.ownerEmail}
             className={inputClass}
           />
@@ -69,6 +72,7 @@ export function CreateTenantForm() {
             type="password"
             autoComplete="new-password"
             required
+            placeholder="Mínimo 8 caracteres"
             minLength={8}
             className={inputClass}
           />

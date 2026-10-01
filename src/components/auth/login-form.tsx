@@ -19,6 +19,7 @@ export function LoginForm() {
           autoComplete="email"
           required
           autoFocus
+          placeholder="tu@correo.com"
           defaultValue={state?.fields?.email}
           className={inputClass}
         />
@@ -30,6 +31,7 @@ export function LoginForm() {
             id="password"
             name="password"
             type={showPassword ? "text" : "password"}
+            placeholder="Tu contraseña"
             autoComplete="current-password"
             required
             className={`${inputClass} pr-12`}

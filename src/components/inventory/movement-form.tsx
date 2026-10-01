@@ -45,6 +45,7 @@ export function MovementForm({
           id={`${id}-type`}
           name="movementType"
           options={TYPE_OPTIONS}
+          placeholder="Elige el tipo de movimiento"
           defaultValue="purchase"
           onChange={(value) => setType(value ?? "purchase")}
         />
@@ -56,7 +57,7 @@ export function MovementForm({
         error={state?.errors?.quantity}
         hint={type === "adjustment_out" ? "Unidades que salen del inventario." : "Unidades que entran al inventario."}
       >
-        <IntegerInput id={`${id}-quantity`} name="quantity" required defaultValue={fields?.quantity} />
+        <IntegerInput id={`${id}-quantity`} name="quantity" placeholder="1" required defaultValue={fields?.quantity} />
       </Field>
 
       {isPurchase ? (
@@ -95,6 +96,7 @@ export function MovementForm({
               type="text"
               autoComplete="off"
               maxLength={300}
+              placeholder="Factura A-1234"
               defaultValue={fields?.note}
               className={inputClass}
             />
@@ -114,6 +116,7 @@ export function MovementForm({
             autoComplete="off"
             required
             maxLength={300}
+            placeholder="Conteo físico: faltaba una pieza"
             defaultValue={fields?.note}
             className={inputClass}
           />

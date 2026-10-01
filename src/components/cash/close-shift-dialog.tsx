@@ -55,6 +55,7 @@ function CloseShiftForm({ action, expectedCash, onCancel }: { action: Action; ex
           name="notes"
           rows={2}
           maxLength={500}
+          placeholder="Faltaron $20 por un cambio mal dado"
           defaultValue={state?.fields?.notes}
           className={`${inputClass} resize-y`}
         />

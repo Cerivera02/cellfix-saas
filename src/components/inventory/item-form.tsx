@@ -73,6 +73,7 @@ export function ItemForm({
               autoComplete="off"
               required
               maxLength={150}
+              placeholder="Pantalla Samsung Galaxy A54"
               defaultValue={value("name")}
               className={inputClass}
             />
@@ -86,6 +87,7 @@ export function ItemForm({
               name="description"
               rows={3}
               maxLength={1000}
+              placeholder="Original, color negro; compatible con A54 5G"
               defaultValue={value("description")}
               className={`${inputClass} resize-y`}
             />
@@ -104,6 +106,7 @@ export function ItemForm({
             type="text"
             autoComplete="off"
             maxLength={64}
+            placeholder="7501234567890"
             defaultValue={value("barcode")}
             className={`${inputClass} font-mono`}
           />
@@ -185,7 +188,7 @@ export function ItemForm({
         )}
 
         <Field label="IVA (%)" name={`${id}-tax`} error={state?.errors?.taxRate} hint="Usa 0 si el artículo no lleva IVA.">
-          <DecimalInput id={`${id}-tax`} name="taxRate" defaultValue={value("taxRate") ?? "16"} />
+          <DecimalInput id={`${id}-tax`} name="taxRate" placeholder="16" defaultValue={value("taxRate") ?? "16"} />
         </Field>
 
         <label className="flex cursor-pointer items-start gap-3 self-start rounded-lg border border-zinc-200 px-3.5 py-3 hover:bg-zinc-50 sm:mt-6">

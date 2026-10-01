@@ -73,6 +73,7 @@ export function OrderForm({
               id={`${id}-type`}
               name="deviceType"
               options={DEVICE_TYPES.map((type) => ({ value: type, label: type }))}
+              placeholder="Elige el tipo de equipo"
               defaultValue={value("deviceType") || "Teléfono"}
               isSearchable
             />
@@ -98,6 +99,7 @@ export function OrderForm({
               type="text"
               autoComplete="off"
               maxLength={80}
+              placeholder="Galaxy A54"
               defaultValue={value("model")}
               className={inputClass}
             />
@@ -110,6 +112,7 @@ export function OrderForm({
               type="text"
               autoComplete="off"
               maxLength={40}
+              placeholder="356789104512345"
               defaultValue={value("serialNumber")}
               className={`${inputClass} font-mono`}
             />
@@ -122,6 +125,7 @@ export function OrderForm({
               type="text"
               autoComplete="off"
               maxLength={40}
+              placeholder="Negro"
               defaultValue={value("color")}
               className={inputClass}
             />
@@ -144,6 +148,7 @@ export function OrderForm({
                 type="text"
                 autoComplete="off"
                 maxLength={300}
+                placeholder="Funda, cargador"
                 defaultValue={value("accessories")}
                 className={inputClass}
               />
@@ -157,6 +162,7 @@ export function OrderForm({
                 name="deviceCondition"
                 rows={2}
                 maxLength={500}
+                placeholder="Rayón en la esquina superior, pantalla sin golpes"
                 defaultValue={value("deviceCondition")}
                 className={`${inputClass} resize-y`}
               />
@@ -189,6 +195,7 @@ export function OrderForm({
                 rows={3}
                 maxLength={1000}
                 required
+                placeholder="No enciende después de mojarse"
                 defaultValue={value("reportedIssue")}
                 className={`${inputClass} resize-y`}
               />

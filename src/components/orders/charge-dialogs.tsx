@@ -198,7 +198,7 @@ function DeliverContent({
       {balance < 0 &&
         (canCollect ? (
           <Field label="Reembolsar en" name={`${id}-refund`} hint="Lo pagado supera el total de la reparación.">
-            <Select id={`${id}-refund`} options={METHOD_OPTIONS} defaultValue={refundMethod} onChange={(value) => setRefundMethod(value ?? "cash")} />
+            <Select id={`${id}-refund`} options={METHOD_OPTIONS} placeholder="Elige cómo reembolsar" defaultValue={refundMethod} onChange={(value) => setRefundMethod(value ?? "cash")} />
           </Field>
         ) : (
           <p className="rounded-lg bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800">
@@ -280,7 +280,7 @@ function CancelForm({
 
       {paid && (
         <Field label={`Reembolsar ${formatMoney(paidTotal)} en`} name={`${id}-refund`}>
-          <Select id={`${id}-refund`} name="refundMethod" options={METHOD_OPTIONS} defaultValue={state?.fields?.refundMethod || "cash"} />
+          <Select id={`${id}-refund`} name="refundMethod" options={METHOD_OPTIONS} placeholder="Elige cómo reembolsar" defaultValue={state?.fields?.refundMethod || "cash"} />
         </Field>
       )}
 

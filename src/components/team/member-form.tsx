@@ -37,6 +37,7 @@ export function MemberForm({
           type="text"
           autoComplete="off"
           required
+          placeholder="Ej. María López"
           defaultValue={fields.name}
           className={inputClass}
         />
@@ -49,6 +50,7 @@ export function MemberForm({
           type="email"
           autoComplete="off"
           required
+          placeholder="nombre@correo.com"
           defaultValue={fields.email}
           className={inputClass}
         />
@@ -61,6 +63,7 @@ export function MemberForm({
           type="password"
           autoComplete="new-password"
           required
+          placeholder="Mínimo 8 caracteres"
           minLength={8}
           className={inputClass}
         />

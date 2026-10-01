@@ -36,6 +36,7 @@ export function SignupForm() {
           autoComplete="name"
           required
           maxLength={100}
+          placeholder="Ej. María López"
           defaultValue={state?.fields?.name}
           className={inputClass}
         />
@@ -49,6 +50,7 @@ export function SignupForm() {
           autoComplete="email"
           required
           maxLength={200}
+          placeholder="tu@correo.com"
           defaultValue={state?.fields?.email}
           className={inputClass}
         />
@@ -65,6 +67,7 @@ export function SignupForm() {
             id="password"
             name="password"
             type={showPassword ? "text" : "password"}
+            placeholder={`Mínimo ${PASSWORD_MIN_LENGTH} caracteres`}
             autoComplete="new-password"
             required
             className={`${inputClass} pr-12`}

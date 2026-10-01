@@ -172,6 +172,7 @@ export function PurchaseForm({
             type="text"
             autoComplete="off"
             maxLength={60}
+            placeholder="A-1234"
             value={invoiceNumber}
             onChange={(event) => setInvoiceNumber(event.target.value)}
             className={inputClass}
@@ -184,6 +185,7 @@ export function PurchaseForm({
               type="text"
               autoComplete="off"
               maxLength={500}
+              placeholder="Llegó una pieza con la caja dañada"
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
               className={inputClass}
@@ -226,6 +228,7 @@ export function PurchaseForm({
                     <IntegerInput
                       id={`${id}-qty-${line.key}`}
                       maxLength={6}
+                      placeholder="1"
                       value={line.quantity}
                       onChange={(value) => updateLine(line.key, { quantity: value })}
                     />
@@ -237,13 +240,13 @@ export function PurchaseForm({
                       onChange={(value) => updateLine(line.key, { unitCost: value })}
                     />
                   </Field>
-                  <Field label="Para la orden" name={`${id}-order-${line.key}`}>
+                  <Field label="Para la orden" name={`${id}-order-${line.key}`} hint="Opcional.">
                     <AsyncSelect
                       id={`${id}-order-${line.key}`}
                       value={line.order}
                       onChange={(order) => updateLine(line.key, { order })}
                       loadOptions={searchOrdersAction}
-                      placeholder="Opcional"
+                      placeholder="Busca por folio, cliente o modelo"
                     />
                   </Field>
                 </div>

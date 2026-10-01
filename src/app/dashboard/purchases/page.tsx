@@ -75,7 +75,7 @@ export default async function PurchasesPage(props: PageProps<"/dashboard/purchas
             name="q"
             type="search"
             defaultValue={search}
-            placeholder="Folio, factura o proveedor"
+            placeholder="Buscar por folio, factura o proveedor"
             aria-label="Buscar compras"
             className={inputClass}
           />

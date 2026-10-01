@@ -43,6 +43,7 @@ export function CustomRoleForm({
           autoComplete="off"
           required
           maxLength={60}
+          placeholder="Ej. Encargado de mostrador"
           defaultValue={state?.fields?.name ?? defaults?.name}
           className={inputClass}
         />
@@ -55,6 +56,7 @@ export function CustomRoleForm({
           type="text"
           autoComplete="off"
           maxLength={200}
+          placeholder="Ej. Recibe equipos y cobra en caja"
           defaultValue={state?.fields?.description ?? defaults?.description}
           className={inputClass}
         />

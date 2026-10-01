@@ -27,6 +27,7 @@ function QuickCustomerForm({ onCreated, onCancel }: { onCreated: (customer: Sele
             autoComplete="off"
             required
             maxLength={80}
+            placeholder="María"
             defaultValue={fields.firstName}
             className={inputClass}
           />
@@ -38,6 +39,7 @@ function QuickCustomerForm({ onCreated, onCancel }: { onCreated: (customer: Sele
             type="text"
             autoComplete="off"
             maxLength={120}
+            placeholder="López Hernández"
             defaultValue={fields.lastName}
             className={inputClass}
           />
@@ -49,6 +51,7 @@ function QuickCustomerForm({ onCreated, onCancel }: { onCreated: (customer: Sele
             type="tel"
             autoComplete="off"
             maxLength={30}
+            placeholder="55 1234 5678"
             defaultValue={fields.phone}
             className={inputClass}
           />
@@ -60,6 +63,7 @@ function QuickCustomerForm({ onCreated, onCancel }: { onCreated: (customer: Sele
             type="email"
             autoComplete="off"
             maxLength={200}
+            placeholder="cliente@correo.com"
             defaultValue={fields.email}
             className={inputClass}
           />

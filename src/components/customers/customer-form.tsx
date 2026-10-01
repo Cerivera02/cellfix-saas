@@ -68,6 +68,7 @@ export function CustomerForm({
             autoComplete="off"
             required
             maxLength={80}
+            placeholder="María"
             defaultValue={value("firstName")}
             className={inputClass}
           />
@@ -80,6 +81,7 @@ export function CustomerForm({
             type="text"
             autoComplete="off"
             maxLength={120}
+            placeholder="López Hernández"
             defaultValue={value("lastName")}
             className={inputClass}
           />
@@ -92,6 +94,7 @@ export function CustomerForm({
             type="tel"
             autoComplete="off"
             maxLength={30}
+            placeholder="55 1234 5678"
             defaultValue={value("phone")}
             className={inputClass}
           />
@@ -104,6 +107,7 @@ export function CustomerForm({
             type="email"
             autoComplete="off"
             maxLength={200}
+            placeholder="cliente@correo.com"
             defaultValue={value("email")}
             className={inputClass}
           />
@@ -116,6 +120,7 @@ export function CustomerForm({
               name="notes"
               rows={2}
               maxLength={1000}
+              placeholder="Prefiere WhatsApp; suele traer iPhone"
               defaultValue={value("notes")}
               className={`${inputClass} resize-y`}
             />
@@ -154,6 +159,7 @@ export function CustomerForm({
                 type="text"
                 autoComplete="off"
                 maxLength={20}
+                placeholder="LOGM850101AB1"
                 value={rfc}
                 onChange={(event) => setRfc(event.target.value.toUpperCase())}
                 className={`${inputClass} font-mono uppercase`}
@@ -173,6 +179,7 @@ export function CustomerForm({
                 inputMode="numeric"
                 autoComplete="off"
                 maxLength={5}
+                placeholder="06600"
                 defaultValue={value("taxZipCode")}
                 className={`${inputClass} tabular-nums`}
               />
@@ -191,6 +198,7 @@ export function CustomerForm({
                   type="text"
                   autoComplete="off"
                   maxLength={250}
+                  placeholder="MARÍA LÓPEZ HERNÁNDEZ"
                   defaultValue={value("legalName")}
                   className={`${inputClass} uppercase`}
                 />
@@ -203,7 +211,7 @@ export function CustomerForm({
                 name="taxRegime"
                 options={regimeOptions}
                 defaultValue={value("taxRegime")}
-                placeholder="Elige el régimen"
+                placeholder="Elige el régimen fiscal"
                 isSearchable
               />
             </Field>
@@ -213,6 +221,7 @@ export function CustomerForm({
                 id={`${id}-use`}
                 name="cfdiUse"
                 options={useOptions}
+                placeholder="Elige el uso del CFDI"
                 defaultValue={value("cfdiUse") || "G03"}
                 isSearchable
               />
@@ -231,6 +240,7 @@ export function CustomerForm({
                   type="email"
                   autoComplete="off"
                   maxLength={200}
+                  placeholder="facturas@correo.com"
                   defaultValue={value("billingEmail")}
                   className={inputClass}
                 />
