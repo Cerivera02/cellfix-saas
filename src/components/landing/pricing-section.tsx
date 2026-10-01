@@ -8,13 +8,13 @@ const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-
 // Si los precios no se pudieron leer, la sección queda solo con la invitación a la prueba.
 export function PricingSection({ pricing }: { pricing: PublicPricing | null }) {
   return (
-    <section id="precios" className="mat-grid scroll-mt-16 text-white">
+    <section id="precios" className="scroll-mt-16 bg-zinc-950 text-white">
       <div className="mx-auto max-w-6xl px-4 py-24 sm:px-6">
         <div className="max-w-2xl">
           <h2 className="font-display text-3xl font-bold tracking-tight [font-stretch:112%] sm:text-4xl">
             Pagas la base y los módulos que usas
           </h2>
-          <p className="mt-4 leading-relaxed text-mat-text">
+          <p className="mt-4 leading-relaxed text-zinc-400">
             {pricing
               ? `Prueba gratis ${pricing.trialDays} días con todos los módulos, sin tarjeta. Al terminar, te quedas con los que necesita tu taller y pagas cada mes.`
               : "Prueba gratis con todos los módulos, sin tarjeta. Al terminar, te quedas con los que necesita tu taller y pagas cada mes."}

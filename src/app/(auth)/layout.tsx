@@ -33,13 +33,13 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         </p>
       </aside>
 
-      <main className="flex flex-col bg-zinc-50 px-4 py-8 sm:px-8 lg:px-12 lg:py-10">
+      <main className="flex flex-col bg-zinc-50 px-4 py-8 sm:px-8 lg:px-12 lg:py-6">
         <div className="flex justify-end">
           <Link href="/" className={`rounded text-sm text-zinc-500 hover:text-zinc-900 ${focusRing}`}>
             Volver al inicio
           </Link>
         </div>
-        <div className="flex flex-1 items-center justify-center py-10">
+        <div className="flex flex-1 items-center justify-center py-6">
           <div className="w-full max-w-sm">{children}</div>
         </div>
       </main>

@@ -39,15 +39,15 @@ export function PricingCalculator({ pricing }: { pricing: PublicPricing }) {
     <div className="mt-14 grid items-start gap-12 lg:grid-cols-[1.25fr_1fr] lg:gap-16">
       <div>
         {/* Base: siempre incluida, sin casilla porque no se puede quitar. */}
-        <div className="border-b border-mat-text/30 pb-8">
+        <div className="border-b border-white/15 pb-8">
           <div className="flex items-baseline justify-between gap-4">
             <h3 className="font-display text-lg font-bold tracking-wide uppercase [font-stretch:75%]">Base</h3>
             <p className="font-folio text-white">
               {format(pricing.baseCents)}
-              <span className="text-sm text-mat-text"> /mes</span>
+              <span className="text-sm text-zinc-400"> /mes</span>
             </p>
           </div>
-          <p className="mt-1 text-sm text-mat-text">Siempre incluida.</p>
+          <p className="mt-1 text-sm text-zinc-400">Siempre incluida.</p>
           <ul className="mt-4 flex flex-wrap gap-2">
             {BASE_INCLUDES.map((item) => (
               <li
@@ -64,7 +64,7 @@ export function PricingCalculator({ pricing }: { pricing: PublicPricing }) {
           <legend className="font-display text-lg font-bold tracking-wide uppercase [font-stretch:75%]">
             Módulos
           </legend>
-          <p className="mt-1 text-sm text-mat-text">Agrega solo los que usa tu taller.</p>
+          <p className="mt-1 text-sm text-zinc-400">Agrega solo los que usa tu taller.</p>
 
           <ul className="mt-5 space-y-2">
             {pricing.modules.map((module) => {
@@ -75,7 +75,7 @@ export function PricingCalculator({ pricing }: { pricing: PublicPricing }) {
                   <label
                     htmlFor={inputId}
                     className={`grid cursor-pointer grid-cols-[auto_1fr_auto] items-start gap-x-4 gap-y-1 rounded-md border px-4 py-3.5 transition has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-white ${
-                      checked ? "border-white/60 bg-white/10" : "border-mat-text/25 hover:border-mat-text/60"
+                      checked ? "border-white/60 bg-white/10" : "border-white/15 hover:border-white/40"
                     }`}
                   >
                     <input
@@ -92,7 +92,7 @@ export function PricingCalculator({ pricing }: { pricing: PublicPricing }) {
                     <span className="text-right font-folio text-sm whitespace-nowrap">
                       +{format(module.priceCents)}
                     </span>
-                    <span id={`${inputId}-desc`} className="col-start-2 col-end-4 text-sm leading-relaxed text-mat-text">
+                    <span id={`${inputId}-desc`} className="col-start-2 col-end-4 text-sm leading-relaxed text-zinc-400">
                       {module.description}
                       {module.requires.length > 0 && (
                         <span className="sr-only"> Al marcarlo se agrega {module.requires.map(labelOf).join(" y ")}.</span>
@@ -108,7 +108,7 @@ export function PricingCalculator({ pricing }: { pricing: PublicPricing }) {
 
       {/* La cotización se imprime como ticket térmico: cada módulo marcado agrega un renglón. */}
       <div className="lg:sticky lg:top-24">
-        <div className="receipt mx-auto max-w-sm bg-white px-6 pt-7 pb-10 text-zinc-900 shadow-[0_24px_48px_-16px_rgb(0_0_0/0.45)] [--perf-bg:var(--color-mat)] sm:px-7">
+        <div className="receipt mx-auto max-w-sm bg-white px-6 pt-7 pb-10 text-zinc-900 shadow-[0_24px_48px_-16px_rgb(0_0_0/0.45)] [--perf-bg:var(--color-zinc-950)] sm:px-7">
           <div className="text-center">
             <p className="font-display text-xl font-extrabold tracking-tight [font-stretch:112%]">CellFix</p>
             <p className="mt-1 font-folio text-xs tracking-wide text-zinc-500 uppercase">Cotización mensual</p>

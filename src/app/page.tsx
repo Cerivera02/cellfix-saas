@@ -25,35 +25,13 @@ const devices = ["Celulares", "Tablets", "Laptops", "Televisiones", "Consolas", 
 
 // Los estados reales de una orden en CellFix, en el orden en que suceden.
 const journey = [
-  {
-    status: "Recibido",
-    description:
-      "Cliente, equipo, falla y accesorios. El desbloqueo se guarda como PIN, contraseña o el patrón dibujado en pantalla, y las fotos del equipo se toman con el celular escaneando un código QR.",
-  },
-  {
-    status: "En diagnóstico",
-    description: "El técnico toma la orden desde «Por tomar» y anota lo que encontró.",
-  },
-  {
-    status: "Esperando autorización",
-    description: "Presupuesto de refacciones y mano de obra para que el cliente decida antes de continuar.",
-  },
-  {
-    status: "Esperando refacción",
-    description: "Si falta la pieza, la orden queda en pausa sin perderse entre las demás.",
-  },
-  {
-    status: "En reparación",
-    description: "Las refacciones que se usan se descuentan del inventario.",
-  },
-  {
-    status: "Listo para entregar",
-    description: "La orden pasa a «Listas para entregar» para que el mostrador la ubique al momento.",
-  },
-  {
-    status: "Entregado",
-    description: "Se cobra el saldo con el anticipo ya descontado y se imprime el ticket de 80 mm.",
-  },
+  { status: "Recibido", description: "Anotas los datos del cliente y de su equipo, y le das su comprobante." },
+  { status: "En diagnóstico", description: "Revisas el equipo y escribes qué tiene." },
+  { status: "Esperando autorización", description: "Le dices al cliente cuánto cuesta y esperas su respuesta." },
+  { status: "Esperando refacción", description: "Si falta una pieza, el equipo espera sin que se te olvide." },
+  { status: "En reparación", description: "Haces el arreglo y anotas lo que usaste." },
+  { status: "Listo para entregar", description: "El equipo ya está listo para que el cliente pase por él." },
+  { status: "Entregado", description: "El cliente paga lo que falta y se lleva su equipo." },
 ];
 
 const modules = [
@@ -210,12 +188,14 @@ export default async function Home() {
                 El recorrido de un equipo
               </h2>
               <p className="mt-4 text-mat-text">
-                Siete estados, del mostrador al banco de trabajo y de regreso. Cualquiera en el taller sabe
-                dónde está cada orden sin preguntar.
+                Así avanza cada equipo que te dejan. En todo momento sabes en qué paso va, sin buscar en
+                libretas ni preguntar.
               </p>
             </div>
 
-            <ol className="mt-14 border-l border-mat-text/30">
+            {/* Panel translúcido detrás de los pasos: separa el texto de la cuadrícula del tapete. */}
+            <div className="mt-14 rounded-2xl bg-mat-deep/80 px-5 py-3 shadow-[0_0_80px_24px_rgb(36_58_71/0.7)] ring-1 ring-white/10 backdrop-blur-sm sm:px-8 sm:py-5">
+            <ol className="border-l border-mat-text/30">
               {journey.map((step, index) => (
                 <li
                   key={step.status}
@@ -223,7 +203,7 @@ export default async function Home() {
                 >
                   <span
                     aria-hidden="true"
-                    className="absolute top-[1.65rem] -left-[5px] size-[9px] rounded-full bg-white ring-4 ring-mat"
+                    className="absolute top-[1.65rem] -left-[5px] size-[9px] rounded-full bg-white ring-4 ring-mat-deep"
                   />
                   <p className="flex items-baseline gap-3">
                     <span className="font-folio text-xs text-mat-text">{String(index + 1).padStart(2, "0")}</span>
@@ -231,10 +211,11 @@ export default async function Home() {
                       {step.status}
                     </span>
                   </p>
-                  <p className="max-w-xl text-sm leading-relaxed text-mat-text">{step.description}</p>
+                  <p className="max-w-xl text-base leading-relaxed text-white/90">{step.description}</p>
                 </li>
               ))}
             </ol>
+            </div>
           </div>
         </section>
 
