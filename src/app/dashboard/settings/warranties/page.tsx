@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ConfirmSubmitButton } from "@/components/admin/confirm-submit-button";
 import { WarrantyDialogButton } from "@/components/settings/warranty-dialog-button";
+import { NavIcon } from "@/components/shell/nav-icon";
 import { ghostButtonClass } from "@/components/ui/form";
 import { requireTenantPermission } from "@/lib/auth/session";
 import { createWarrantyAction, setWarrantyActiveAction, updateWarrantyAction } from "@/lib/settings/actions";
@@ -26,6 +27,7 @@ export default async function WarrantiesPage() {
         </div>
         <WarrantyDialogButton
           label="Nueva garantía"
+          icon="plus"
           title="Nueva garantía"
           action={createWarrantyAction}
           submitLabel="Agregar garantía"
@@ -65,6 +67,8 @@ export default async function WarrantiesPage() {
                     <div className="flex justify-end gap-1">
                       <WarrantyDialogButton
                         label="Editar"
+                        icon="pencil"
+                        iconOnly
                         variant="ghost"
                         title="Editar garantía"
                         action={updateWarrantyAction.bind(null, warranty.id)}
@@ -78,9 +82,13 @@ export default async function WarrantiesPage() {
                               ? `¿Archivar la garantía ${warranty.name}? Ya no aparecerá al entregar.`
                               : undefined
                           }
-                          className={ghostButtonClass}
+                          confirmLabel={warranty.isActive ? "Archivar" : "Reactivar"}
+                          className={`${ghostButtonClass} inline-flex items-center gap-1.5`}
                         >
-                          {warranty.isActive ? "Archivar" : "Reactivar"}
+                          <span title={warranty.isActive ? "Archivar" : "Reactivar"}>
+                            <NavIcon name={warranty.isActive ? "archive" : "restore"} className="size-4" />
+                          </span>
+                          <span className="sr-only">{warranty.isActive ? "Archivar" : "Reactivar"}</span>
                         </ConfirmSubmitButton>
                       </form>
                     </div>
