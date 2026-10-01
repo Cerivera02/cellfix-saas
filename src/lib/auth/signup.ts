@@ -1,15 +1,18 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { clientIp, takeRateLimit } from "@/lib/auth/rate-limit";
 import { createSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import type { FormState } from "@/lib/form-state";
+import { createRateLimiter } from "@/lib/rate-limit/limiter";
+import { SIGNUP_ATTEMPTS_PER_IP, SIGNUPS_PER_IP } from "@/lib/rate-limit/limits";
+import { clientIp } from "@/lib/rate-limit/server";
 import { EmailTakenError } from "@/lib/team/core";
 import { createTenantWithOwner } from "@/lib/tenancy/create";
 import { EMAIL_PATTERN, getPasswordError, readField, readPassword } from "@/lib/validation";
 
-const HOUR_MS = 60 * 60 * 1000;
+const signupAttempts = createRateLimiter("signup", SIGNUP_ATTEMPTS_PER_IP);
+const signupsCreated = createRateLimiter("signup-ok", SIGNUPS_PER_IP);
 
 // Tope global de registros por hora, sin importar la IP: freno de emergencia si alguien
 // logra saltarse el límite por IP (cada registro crea un schema en la base).
@@ -39,7 +42,7 @@ export async function signup(_prevState: FormState, formData: FormData): Promise
   }
 
   const ip = await clientIp();
-  if (!takeRateLimit(`signup:${ip}`, 10, HOUR_MS)) {
+  if (!(await signupAttempts.consume(ip)).allowed) {
     return { message: "Hiciste demasiados intentos. Espera un rato e inténtalo de nuevo.", fields };
   }
 
@@ -56,7 +59,7 @@ export async function signup(_prevState: FormState, formData: FormData): Promise
   }
 
   // Cuentas creadas con éxito por IP: evita que alguien llene la base de talleres falsos.
-  if (!takeRateLimit(`signup-ok:${ip}`, 3, 24 * HOUR_MS)) {
+  if (!(await signupsCreated.consume(ip)).allowed) {
     return { message: "Ya se crearon varias cuentas desde esta conexión hoy. Inténtalo mañana.", fields };
   }
 
