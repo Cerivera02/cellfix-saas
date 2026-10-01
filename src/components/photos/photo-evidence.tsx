@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { secondaryButtonClass, ghostButtonClass } from "@/components/ui/form";
 import { createPhotoSessionAction, deletePhotoAction, listPhotosAction, type PhotoSession } from "@/lib/photos/actions";
 
@@ -25,6 +26,8 @@ export function PhotoEvidence({
   const [sessionIds, setSessionIds] = useState<string[]>([]);
   const [expired, setExpired] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Foto que espera confirmación para borrarse.
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   // Mientras el código está vigente, revisa cada 3 segundos si llegaron fotos nuevas.
@@ -98,9 +101,7 @@ export function PhotoEvidence({
                   type="button"
                   aria-label={`Borrar evidencia ${index + 1}`}
                   disabled={pending}
-                  onClick={() => {
-                    if (window.confirm("¿Borrar esta foto?")) remove(photo.id);
-                  }}
+                  onClick={() => setConfirmingId(photo.id)}
                   className="absolute top-1 right-1 flex size-6 items-center justify-center rounded-full bg-white/90 text-sm text-zinc-700 shadow-sm transition hover:bg-red-50 hover:text-red-600"
                 >
                   ×
@@ -144,6 +145,17 @@ export function PhotoEvidence({
       )}
 
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+
+      <ConfirmDialog
+        open={confirmingId !== null}
+        message="¿Borrar esta foto?"
+        confirmLabel="Borrar"
+        onCancel={() => setConfirmingId(null)}
+        onConfirm={() => {
+          if (confirmingId) remove(confirmingId);
+          setConfirmingId(null);
+        }}
+      />
     </div>
   );
 }

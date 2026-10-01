@@ -77,6 +77,7 @@ export default async function TenantSubscriptionPage(props: PageProps<"/admin/te
           label="Marcar como activa"
           pendingLabel="Activando…"
           confirm={`¿Activar la suscripción de ${tenant.name} sin cobro en Stripe?`}
+          confirmTone="default"
           className={secondaryButtonClass}
         />
       </section>

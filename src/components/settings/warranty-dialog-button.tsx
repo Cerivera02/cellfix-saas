@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useId, useState } from "react";
+import { NavIcon, type IconName } from "@/components/shell/nav-icon";
 import { FormMessage } from "@/components/admin/form-message";
 import { Field, ghostButtonClass, inputClass, primaryButtonClass, secondaryButtonClass } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
@@ -65,6 +66,8 @@ function WarrantyForm({
 
 export function WarrantyDialogButton({
   label,
+  icon,
+  iconOnly = false,
   variant = "primary",
   title,
   action,
@@ -72,6 +75,10 @@ export function WarrantyDialogButton({
   submitLabel,
 }: {
   label: string;
+  // Ícono opcional junto al texto del botón.
+  icon?: IconName;
+  // Solo el ícono; el texto queda como tooltip y para lectores de pantalla.
+  iconOnly?: boolean;
   variant?: "primary" | "ghost";
   title: string;
   action: WarrantyAction;
@@ -85,9 +92,12 @@ export function WarrantyDialogButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={variant === "primary" ? primaryButtonClass : ghostButtonClass}
+        title={iconOnly ? label : undefined}
+        aria-label={iconOnly ? label : undefined}
+        className={`${variant === "primary" ? primaryButtonClass : ghostButtonClass} inline-flex items-center gap-1.5`}
       >
-        {label}
+        {icon && <NavIcon name={icon} className="size-4" />}
+        {!iconOnly && label}
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title={title}>
         {open && (

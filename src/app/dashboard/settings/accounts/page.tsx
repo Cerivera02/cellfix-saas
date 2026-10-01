@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ConfirmSubmitButton } from "@/components/admin/confirm-submit-button";
 import { BankAccountDialogButton } from "@/components/cash/bank-account-dialog-button";
+import { NavIcon } from "@/components/shell/nav-icon";
 import { ghostButtonClass } from "@/components/ui/form";
 import { requireTenantPermission } from "@/lib/auth/session";
 import { createBankAccountAction, setBankAccountActiveAction, updateBankAccountAction } from "@/lib/cash/actions";
@@ -27,6 +28,7 @@ export default async function BankAccountsPage() {
         </div>
         <BankAccountDialogButton
           label="Nueva cuenta"
+          icon="plus"
           title="Nueva cuenta bancaria"
           action={createBankAccountAction}
           submitLabel="Agregar cuenta"
@@ -69,6 +71,8 @@ export default async function BankAccountsPage() {
                     <div className="flex justify-end gap-1">
                       <BankAccountDialogButton
                         label="Editar"
+                        icon="pencil"
+                        iconOnly
                         variant="ghost"
                         title="Editar cuenta bancaria"
                         action={updateBankAccountAction.bind(null, account.id)}
@@ -87,9 +91,13 @@ export default async function BankAccountsPage() {
                               ? `¿Archivar la cuenta ${account.bankName}${account.alias ? ` (${account.alias})` : ""}? Ya no aparecerá al cobrar.`
                               : undefined
                           }
-                          className={ghostButtonClass}
+                          confirmLabel={account.isActive ? "Archivar" : "Reactivar"}
+                          className={`${ghostButtonClass} inline-flex items-center gap-1.5`}
                         >
-                          {account.isActive ? "Archivar" : "Reactivar"}
+                          <span title={account.isActive ? "Archivar" : "Reactivar"}>
+                            <NavIcon name={account.isActive ? "archive" : "restore"} className="size-4" />
+                          </span>
+                          <span className="sr-only">{account.isActive ? "Archivar" : "Reactivar"}</span>
                         </ConfirmSubmitButton>
                       </form>
                     </div>
