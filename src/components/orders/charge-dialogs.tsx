@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useId, useState, useTransition } from "react";
 import { FormMessage } from "@/components/admin/form-message";
+import { OpenShiftHint } from "@/components/cash/open-shift-prompt";
 import { PaymentForm, type AccountOption } from "@/components/cash/payment-dialog";
 import { DialogButton, useDialogAction } from "@/components/ui/dialog-button";
 import {
@@ -208,6 +209,7 @@ function DeliverContent({
 
       <p aria-live="polite" className="min-h-5 text-sm text-red-600">
         {error}
+        <OpenShiftHint message={error} />
       </p>
 
       <div className="flex justify-end gap-3">

@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { primaryButtonClass } from "@/components/ui/form";
+import { CashOverview } from "@/components/cash/cash-overview";
+import { MonthSummarySection, TechnicianProductivitySection } from "@/components/reports/owner-reports";
 import { requireTenantSession } from "@/lib/auth/session";
+import { getCashDashboard } from "@/lib/cash/core";
 import { getOrderCounts } from "@/lib/orders/core";
 import { ACTIVE_ORDER_STATUSES, ORDER_ACCESS_PERMISSIONS, ORDER_STATUS_LABELS } from "@/lib/orders/labels";
+import { getOwnerReports, type ProductivityPeriod } from "@/lib/reports/core";
 
 export const metadata: Metadata = {
   title: "Panel — CellFix",
@@ -28,12 +31,23 @@ const NOTICES: Record<string, string> = {
 
 export default async function DashboardPage(props: PageProps<"/dashboard">) {
   const session = await requireTenantSession();
-  const { aviso } = await props.searchParams;
+  const { aviso, productividad } = await props.searchParams;
   const notice = typeof aviso === "string" ? NOTICES[aviso] : undefined;
   const firstName = session.user.name.split(" ")[0];
   const canSeeOrders = ORDER_ACCESS_PERMISSIONS.some((permission) => session.permissions.includes(permission));
   const isTechnician = session.permissions.includes("repairs.work");
-  const counts = canSeeOrders ? await getOrderCounts(session.tenant.id, session.user.id) : null;
+  // Resumen de caja solo para quien ve cortes (propietario, supervisor); recepción solo abre y cierra.
+  // El permiso ya viene filtrado por el módulo de Caja.
+  const canSeeCash = session.permissions.includes("cash.view");
+  // Resumen del mes y productividad: solo con reports.view (propietario por omisión).
+  const canSeeReports = session.permissions.includes("reports.view");
+  const period: ProductivityPeriod = productividad === "semana" ? "week" : "month";
+  const now = new Date();
+  const [counts, cash, reports] = await Promise.all([
+    canSeeOrders ? getOrderCounts(session.tenant.id, session.user.id) : null,
+    canSeeCash ? getCashDashboard(session.tenant.id, { activityLimit: 8, shiftsLimit: 5 }) : null,
+    canSeeReports ? getOwnerReports(session.tenant.id, period, now) : null,
+  ]);
 
   return (
     <>
@@ -50,18 +64,25 @@ export default async function DashboardPage(props: PageProps<"/dashboard">) {
           : ", pero aún no tienes roles asignados."}
       </p>
 
+      {/* Orden pedido por el propietario: equipos, caja, resumen del mes y productividad. */}
       {counts && (
-        <>
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="mt-10">
+          <div className="flex items-baseline justify-between gap-4">
+            <h2 className="text-lg font-semibold tracking-tight">Equipos en el taller</h2>
+            <Link href="/dashboard/orders" className="text-sm font-medium text-zinc-600 hover:text-zinc-900">
+              Ver órdenes →
+            </Link>
+          </div>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Stat label="En proceso" value={counts.views.active} href="/dashboard/orders" />
             <Stat label="Por tomar" value={counts.views.unassigned} href="/dashboard/orders?vista=unassigned" />
             {isTechnician && <Stat label="Mis órdenes" value={counts.views.mine} href="/dashboard/orders?vista=mine" />}
             <Stat label="Listas para entregar" value={counts.views.ready} href="/dashboard/orders?vista=ready" />
           </div>
 
-          {counts.views.active > 0 ? (
-            <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-5">
-              <h2 className="font-medium">Órdenes por estado</h2>
+          {counts.views.active > 0 && (
+            <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-5">
+              <h3 className="font-medium">Órdenes por estado</h3>
               <ul className="mt-3 divide-y divide-zinc-100">
                 {ACTIVE_ORDER_STATUSES.filter((status) => counts.byStatus[status]).map((status) => (
                   <li key={status} className="flex justify-between py-2 text-sm">
@@ -70,17 +91,17 @@ export default async function DashboardPage(props: PageProps<"/dashboard">) {
                   </li>
                 ))}
               </ul>
-            </section>
-          ) : (
-            <div className="mt-6 rounded-2xl border border-dashed border-zinc-300 bg-white px-6 py-12 text-center">
-              <p className="font-medium">No hay equipos en reparación</p>
-              {session.permissions.includes("orders.intake") && (
-                <Link href="/dashboard/orders/new" className={`mt-4 inline-block ${primaryButtonClass}`}>
-                  Recibir equipo
-                </Link>
-              )}
             </div>
           )}
+        </section>
+      )}
+
+      {cash && <CashOverview data={cash} now={now} />}
+
+      {reports && (
+        <>
+          <MonthSummarySection summary={reports.month} />
+          <TechnicianProductivitySection period={period} rows={reports.technicians} />
         </>
       )}
     </>

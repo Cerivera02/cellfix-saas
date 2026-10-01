@@ -3,7 +3,6 @@ import { OpenShiftForm } from "@/components/cash/open-shift-form";
 import { Pos } from "@/components/cash/pos";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireTenantPermission } from "@/lib/auth/session";
-import { openShiftAction } from "@/lib/cash/actions";
 import { getOpenShift, listBankAccounts } from "@/lib/cash/core";
 import { dateTimeFormatter } from "@/lib/cash/format";
 
@@ -33,7 +32,7 @@ export default async function SellPage() {
           </p>
           {canOperate && (
             <div className="mt-6">
-              <OpenShiftForm action={openShiftAction} />
+              <OpenShiftForm />
             </div>
           )}
         </div>

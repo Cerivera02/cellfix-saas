@@ -1,7 +1,9 @@
 import { GraceModal, SubscriptionLine } from "@/components/billing/subscription-notice";
+import { OpenShiftPromptProvider } from "@/components/cash/open-shift-prompt";
 import { AppShell } from "@/components/shell/app-shell";
 import type { NavItem, NavLink } from "@/components/shell/sidebar";
 import { BILLING_PATH, canManageBilling, requireTenantSession } from "@/lib/auth/session";
+import { hasOpenShift } from "@/lib/cash/core";
 import { CUSTOMER_ACCESS_PERMISSIONS } from "@/lib/customers/access";
 import { hasModule } from "@/lib/modules";
 import { ORDER_ACCESS_PERMISSIONS } from "@/lib/orders/labels";
@@ -86,6 +88,12 @@ export default async function DashboardLayout({ children }: LayoutProps<"/dashbo
   }
   if (canManage) items.push({ href: BILLING_PATH, label: "Suscripción", icon: "card" });
 
+  // Ventana "Abrir caja": solo para quien opera la caja (el permiso ya viene filtrado por el módulo).
+  // Una consulta por carga del layout; las páginas no la repiten.
+  const canOperateCash = can("cash.operate");
+  const needsOpenShift = canOperateCash && !(await hasOpenShift(session.tenant.id));
+  const graceState = access.state === "grace" || access.state === "past_due" ? access.state : null;
+
   return (
     <AppShell
       context={session.tenant.name}
@@ -98,15 +106,23 @@ export default async function DashboardLayout({ children }: LayoutProps<"/dashbo
         ) : undefined
       }
     >
-      {(access.state === "grace" || access.state === "past_due") && (
-        <GraceModal
-          tenantId={session.tenant.id}
-          state={access.state}
-          daysLeft={access.daysLeft ?? 0}
-          canManage={canManage}
-        />
-      )}
-      {children}
+      <OpenShiftPromptProvider
+        tenantId={session.tenant.id}
+        userId={session.user.id}
+        canOperate={canOperateCash}
+        needsOpenShift={needsOpenShift}
+        graceState={graceState}
+      >
+        {graceState && (
+          <GraceModal
+            tenantId={session.tenant.id}
+            state={graceState}
+            daysLeft={access.daysLeft ?? 0}
+            canManage={canManage}
+          />
+        )}
+        {children}
+      </OpenShiftPromptProvider>
     </AppShell>
   );
 }

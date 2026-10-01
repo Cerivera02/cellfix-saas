@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSyncExternalStore } from "react";
 import { Modal } from "@/components/ui/modal";
+import { graceNoticeKey, setSessionFlag, useSessionFlag } from "@/components/ui/session-flag";
 import { primaryButtonClass, secondaryButtonClass } from "@/components/ui/form";
 import type { AccessState } from "@/lib/billing/access";
 
@@ -42,31 +42,6 @@ export function SubscriptionLine({
   );
 }
 
-// "Ya lo vio en esta sesión del navegador", en sessionStorage.
-const listeners = new Set<() => void>();
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
-function wasSeen(key: string) {
-  try {
-    return window.sessionStorage.getItem(key) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function markSeen(key: string) {
-  try {
-    window.sessionStorage.setItem(key, "1");
-  } catch {
-    // Sin almacenamiento el aviso vuelve a salir en la siguiente carga; no es grave.
-  }
-  listeners.forEach((listener) => listener());
-}
-
 // Ventana que aparece una vez por sesión del navegador cuando terminó la prueba o hay un pago
 // pendiente. El sistema sigue funcionando; solo invita a elegir plan.
 export function GraceModal({
@@ -81,17 +56,13 @@ export function GraceModal({
   canManage: boolean;
 }) {
   const pathname = usePathname();
-  const key = `cellfix:aviso-suscripcion:${tenantId}:${state}`;
+  const key = graceNoticeKey(tenantId, state);
   // En el servidor se da por visto para no pintar la ventana antes de leer sessionStorage.
-  const seen = useSyncExternalStore(
-    subscribe,
-    () => wasSeen(key),
-    () => true,
-  );
+  const seen = useSessionFlag(key);
 
   if (seen || pathname.startsWith(BILLING_PATH)) return null;
 
-  const close = () => markSeen(key);
+  const close = () => setSessionFlag(key);
   const remaining = `Te quedan ${days(daysLeft)} antes de que se pause el acceso.`;
 
   const title = state === "grace" ? "Tu prueba gratuita terminó" : "No pudimos cobrar tu suscripción";

@@ -6,7 +6,7 @@ import { OpenShiftForm } from "@/components/cash/open-shift-form";
 import { DifferenceText, ShiftBreakdown } from "@/components/cash/shift-breakdown";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireAnyTenantPermission } from "@/lib/auth/session";
-import { addCashMovementAction, closeShiftAction, openShiftAction } from "@/lib/cash/actions";
+import { addCashMovementAction, closeShiftAction } from "@/lib/cash/actions";
 import { listShifts } from "@/lib/cash/core";
 import { dateTimeFormatter } from "@/lib/cash/format";
 import { formatMoney } from "@/lib/inventory/format";
@@ -79,7 +79,7 @@ export default async function ShiftsPage() {
           </p>
           {canOperate && (
             <div className="mt-6">
-              <OpenShiftForm action={openShiftAction} />
+              <OpenShiftForm />
             </div>
           )}
         </div>
