@@ -448,6 +448,140 @@ export async function listShifts(tenantId: string): Promise<ShiftSummary[]> {
   });
 }
 
+export async function hasOpenShift(tenantId: string) {
+  return withTenantDb(tenantId, async (client) => (await findOpenShiftId(client)) !== null);
+}
+
+// Movimiento del turno para el panel: cobros, devoluciones, entradas, salidas y pagos a proveedores.
+export type ShiftActivity = {
+  id: string;
+  createdAt: Date;
+  concept: string;
+  userName: string;
+  // Positivo si entra dinero, negativo si sale (en cualquier método de pago).
+  amount: string;
+  href: string | null;
+};
+
+export type ClosedShiftRow = {
+  id: string;
+  openedAt: Date;
+  openedByName: string;
+  closedAt: Date;
+  closedByName: string;
+  // Cobros de ventas y órdenes del turno, en todos los métodos.
+  income: string;
+  expectedAmount: string;
+  countedAmount: string;
+};
+
+export type CashDashboard = {
+  openShift: ShiftSummary | null;
+  activity: ShiftActivity[];
+  recentShifts: ClosedShiftRow[];
+};
+
+// Resumen de caja para el panel de inicio: turno abierto, sus últimos movimientos y los últimos cortes.
+export async function getCashDashboard(
+  tenantId: string,
+  options: { activityLimit: number; shiftsLimit: number },
+): Promise<CashDashboard> {
+  return withTenantDb(tenantId, async (client) => {
+    const shiftId = await findOpenShiftId(client);
+    const openShift = shiftId ? await loadShiftSummary(client, shiftId) : null;
+
+    let activity: ShiftActivity[] = [];
+    if (shiftId) {
+      const { rows } = await client.query<{
+        id: string;
+        created_at: Date;
+        concept: string;
+        user_name: string;
+        amount: string;
+        href: string | null;
+      }>(
+        `SELECT id, created_at, 'Venta #' || folio || ' · ' || customer_name AS concept, user_name, total AS amount,
+                '/dashboard/cash/sales/' || id AS href
+           FROM sales WHERE shift_id = $1
+         UNION ALL
+         SELECT r.id, r.created_at, 'Devolución de la venta #' || s.folio, r.user_name, -r.refund_total,
+                '/dashboard/cash/sales/' || s.id
+           FROM sale_returns r JOIN sales s ON s.id = r.sale_id
+          WHERE r.shift_id = $1
+         UNION ALL
+         SELECT p.id, p.created_at,
+                CASE p.kind WHEN 'deposit' THEN 'Anticipo' WHEN 'payment' THEN 'Pago' ELSE 'Reembolso' END
+                  || ' · Orden #' || o.folio,
+                p.user_name, CASE WHEN p.kind = 'refund' THEN -p.amount ELSE p.amount END,
+                '/dashboard/orders/' || o.id
+           FROM repair_order_payments p JOIN repair_orders o ON o.id = p.order_id
+          WHERE p.shift_id = $1
+         UNION ALL
+         SELECT id, created_at, CASE WHEN kind = 'in' THEN 'Entrada' ELSE 'Salida' END || ' · ' || reason,
+                user_name, CASE WHEN kind = 'in' THEN amount ELSE -amount END, NULL
+           FROM cash_movements WHERE shift_id = $1
+         UNION ALL
+         SELECT pp.id, pp.created_at, 'Pago a ' || sp.name || ' · Compra #' || p.folio, pp.user_name, -pp.amount,
+                NULL
+           FROM purchase_payments pp
+           JOIN purchases p ON p.id = pp.purchase_id
+           JOIN suppliers sp ON sp.id = p.supplier_id
+          WHERE pp.shift_id = $1
+         ORDER BY created_at DESC
+         LIMIT $2`,
+        [shiftId, options.activityLimit],
+      );
+      activity = rows.map((row) => ({
+        id: row.id,
+        createdAt: row.created_at,
+        concept: row.concept,
+        userName: row.user_name,
+        amount: fromCents(toCents(row.amount)),
+        href: row.href,
+      }));
+    }
+
+    const { rows: shiftRows } = await client.query<{
+      id: string;
+      opened_at: Date;
+      opened_by_name: string;
+      closed_at: Date;
+      closed_by_name: string | null;
+      income: string;
+      expected_amount: string | null;
+      counted_amount: string | null;
+    }>(
+      `SELECT s.id, s.opened_at, s.opened_by_name, s.closed_at, s.closed_by_name, s.expected_amount, s.counted_amount,
+              COALESCE((SELECT sum(total) FROM sales WHERE shift_id = s.id), 0)
+                + COALESCE((SELECT sum(amount) FROM repair_order_payments
+                             WHERE shift_id = s.id AND kind <> 'refund'), 0) AS income
+         FROM cash_shifts s
+        WHERE s.closed_at IS NOT NULL
+        ORDER BY s.closed_at DESC
+        LIMIT $1`,
+      [options.shiftsLimit],
+    );
+
+    return {
+      openShift,
+      activity,
+      recentShifts: shiftRows.map((row) => ({
+        id: row.id,
+        openedAt: row.opened_at,
+        openedByName: row.opened_by_name,
+        closedAt: row.closed_at,
+        closedByName: row.closed_by_name ?? "",
+        income: fromCents(toCents(row.income)),
+        expectedAmount: row.expected_amount ?? "0.00",
+        countedAmount: row.counted_amount ?? "0.00",
+      })),
+    };
+  });
+}
+
+// Otra persona abrió la caja mientras tanto: el objetivo ya se cumplió.
+export class ShiftAlreadyOpenError extends CashError {}
+
 export async function openShift(tenantId: string, actor: CashActor, openingCents: number) {
   if (!Number.isInteger(openingCents) || openingCents < 0) throw new CashError("Fondo inicial no válido.");
 
@@ -461,7 +595,7 @@ export async function openShift(tenantId: string, actor: CashActor, openingCents
       return rows[0].id;
     });
   } catch (error) {
-    if (isUniqueViolation(error, "cash_shifts_single_open")) throw new CashError("Ya hay una caja abierta.");
+    if (isUniqueViolation(error, "cash_shifts_single_open")) throw new ShiftAlreadyOpenError("Ya hay una caja abierta.");
     throw error;
   }
 }

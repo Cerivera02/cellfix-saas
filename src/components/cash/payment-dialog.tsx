@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useRef, useState, useTransition } from "react";
+import { OpenShiftHint } from "@/components/cash/open-shift-prompt";
 import { MoneyInput } from "@/components/ui/money-input";
 import {
   Field,
@@ -334,6 +335,7 @@ export function PaymentForm({
 
       <p aria-live="polite" className="min-h-5 text-sm text-red-600">
         {error ?? (blocker && rows.length > 0 ? blocker : null)}
+        <OpenShiftHint message={error} />
       </p>
 
       <div className="flex justify-end gap-3">

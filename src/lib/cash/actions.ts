@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireTenantPermission } from "@/lib/auth/session";
 import {
   CashError,
+  ShiftAlreadyOpenError,
   addCashMovement,
   closeShift,
   createBankAccount,
@@ -53,6 +54,8 @@ export async function openShiftAction(_prevState: FormState, formData: FormData)
   try {
     await openShift(tenantId, actor, openingCents);
   } catch (error) {
+    // Si otra persona ya la abrió, se refresca para que la ventana y los formularios desaparezcan.
+    if (error instanceof ShiftAlreadyOpenError) refresh();
     return toErrorState(error, { fields });
   }
 
