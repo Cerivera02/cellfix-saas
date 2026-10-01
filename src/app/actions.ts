@@ -1,7 +1,13 @@
 "use server";
 
 import { Resend } from "resend";
+import { createRateLimiter } from "@/lib/rate-limit/limiter";
+import { LEADS_PER_IP } from "@/lib/rate-limit/limits";
+import { clientIp } from "@/lib/rate-limit/server";
 import { EMAIL_PATTERN, readField } from "@/lib/validation";
+
+// Cada mensaje del landing manda un correo: límite por IP para que no lo usen como cañón de spam.
+const leadsByIp = createRateLimiter("lead", LEADS_PER_IP);
 
 export type LeadFormState = {
   status: "idle" | "success" | "error";
@@ -34,6 +40,14 @@ export async function submitLead(
 
   if (Object.keys(errors).length > 0) {
     return { status: "error", message: "Revisa los campos marcados.", errors, fields };
+  }
+
+  if (!(await leadsByIp.consume(await clientIp())).allowed) {
+    return {
+      status: "error",
+      message: "Ya recibimos varios mensajes desde tu conexión. Inténtalo más tarde.",
+      fields,
+    };
   }
 
   const apiKey = process.env.RESEND_API_KEY;
