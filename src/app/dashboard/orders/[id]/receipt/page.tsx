@@ -16,7 +16,6 @@ import {
   ORDER_ACCESS_PERMISSIONS,
   ORDER_OUTCOME_LABELS,
   ORDER_PAYMENT_KIND_LABELS,
-  INTAKE_TYPE_LABELS,
   canSeeOrderPrices,
   describeDevice,
 } from "@/lib/orders/labels";
@@ -75,7 +74,6 @@ function toTicketData(order: OrderDetail, options: { diagnosisCredit: boolean })
     accessories: order.accessories,
     deviceCondition: order.deviceCondition,
     reportedIssue: order.reportedIssue,
-    intakeLabel: order.intakeType ? INTAKE_TYPE_LABELS[order.intakeType] : null,
     diagnosisFee: order.diagnosisFee ? formatMoney(order.diagnosisFee) : null,
     diagnosisNote,
     estimatedCost: order.estimatedCost !== null ? formatMoney(order.estimatedCost) : null,

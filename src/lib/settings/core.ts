@@ -57,6 +57,7 @@ type TicketSettingsRow = {
   show_tracking_qr: boolean | null;
   paper_width: string | null;
   show_customer_phone: boolean | null;
+  show_signature: boolean | null;
 };
 
 export type TicketSettingsInput = {
@@ -70,6 +71,7 @@ export type TicketSettingsInput = {
   showTrackingQr: boolean;
   paperWidth: PaperWidth;
   showCustomerPhone: boolean;
+  showSignature: boolean;
 };
 
 // Sin renglón guardado (o sin nombre comercial) se usan los valores por omisión y el nombre del taller.
@@ -77,7 +79,8 @@ export async function getTicketSettings(tenantId: string): Promise<TicketSetting
   const row = await withTenantDb(tenantId, async (client) => {
     const { rows } = await client.query<TicketSettingsRow>(
       `SELECT t.name AS tenant_name, s.business_name, s.address, s.phone, s.tax_id, s.order_terms,
-              s.order_footer, s.sale_footer, s.show_tracking_qr, s.paper_width, s.show_customer_phone
+              s.order_footer, s.sale_footer, s.show_tracking_qr, s.paper_width, s.show_customer_phone,
+              s.show_signature
          FROM public.tenants t
          LEFT JOIN ticket_settings s ON true
         WHERE t.id = $1`,
@@ -101,6 +104,7 @@ export async function getTicketSettings(tenantId: string): Promise<TicketSetting
     showTrackingQr: row?.show_tracking_qr ?? true,
     paperWidth: row?.paper_width && isPaperWidth(row.paper_width) ? row.paper_width : "80",
     showCustomerPhone: row?.show_customer_phone ?? true,
+    showSignature: row?.show_signature ?? false,
   };
 }
 
@@ -108,13 +112,14 @@ export async function updateTicketSettings(tenantId: string, input: TicketSettin
   await withTenantDb(tenantId, async (client) => {
     await client.query(
       `INSERT INTO ticket_settings (id, business_name, address, phone, tax_id, order_terms, order_footer, sale_footer,
-                                    show_tracking_qr, paper_width, show_customer_phone)
-       VALUES (true, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                                    show_tracking_qr, paper_width, show_customer_phone, show_signature)
+       VALUES (true, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        ON CONFLICT (id) DO UPDATE SET
          business_name = EXCLUDED.business_name, address = EXCLUDED.address, phone = EXCLUDED.phone,
          tax_id = EXCLUDED.tax_id, order_terms = EXCLUDED.order_terms, order_footer = EXCLUDED.order_footer,
          sale_footer = EXCLUDED.sale_footer, show_tracking_qr = EXCLUDED.show_tracking_qr,
-         paper_width = EXCLUDED.paper_width, show_customer_phone = EXCLUDED.show_customer_phone`,
+         paper_width = EXCLUDED.paper_width, show_customer_phone = EXCLUDED.show_customer_phone,
+         show_signature = EXCLUDED.show_signature`,
       [
         input.businessName || null,
         input.address,
@@ -126,6 +131,7 @@ export async function updateTicketSettings(tenantId: string, input: TicketSettin
         input.showTrackingQr,
         input.paperWidth,
         input.showCustomerPhone,
+        input.showSignature,
       ],
     );
   });

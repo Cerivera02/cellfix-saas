@@ -44,8 +44,9 @@ export async function updateTicketSettingsAction(_prevState: FormState, formData
   if (!isPaperWidth(paperWidth)) errors.paperWidth = "Elige el ancho del papel.";
 
   const showCustomerPhone = formData.get("showCustomerPhone") === "on";
+  const showSignature = formData.get("showSignature") === "on";
   const context = {
-    fields: { ...fields, paperWidth, showCustomerPhone: showCustomerPhone ? "on" : "" },
+    fields: { ...fields, paperWidth, showCustomerPhone: showCustomerPhone ? "on" : "", showSignature: showSignature ? "on" : "" },
   };
   if (Object.keys(errors).length > 0 || !isPaperWidth(paperWidth)) return { ...context, errors };
 
@@ -59,6 +60,7 @@ export async function updateTicketSettingsAction(_prevState: FormState, formData
       ...fields,
       paperWidth,
       showCustomerPhone,
+      showSignature,
       showTrackingQr,
     });
   } catch (error) {

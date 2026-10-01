@@ -18,8 +18,6 @@ export type OrderTicketData = {
   accessories: string;
   deviceCondition: string;
   reportedIssue: string;
-  // Tipo de ingreso ("Diagnóstico", "Refacción en existencia"…); null en órdenes anteriores.
-  intakeLabel: string | null;
   // Costo del diagnóstico cobrado al recibir, ya formateado; null si no se cobró.
   diagnosisFee: string | null;
   // Aviso sobre el descuento del diagnóstico ("Se descuenta del total si…" o "descontado de la reparación").
@@ -29,7 +27,8 @@ export type OrderTicketData = {
   // Recepción: refacciones que se cambiarán (en existencia) y su total, ya formateado; null si no hay.
   parts: { id: string; description: string; detail: string; total: string }[];
   partsTotal: string | null;
-  // Refacciones por conseguir anotadas al recibir, sin precio; vacío si no aplica.
+  // Refacciones por conseguir anotadas al recibir. No se imprimen en el comprobante (se ven en la
+  // orden y en el seguimiento); se conservan en los datos por si el taller las quiere de vuelta.
   partsToGet: { id: string; description: string; quantity: number }[];
   lines: { id: string; description: string; detail: string; total: string }[];
   subtotal: string;
@@ -45,7 +44,7 @@ export type OrderTicketData = {
 
 export type OrderTicketSettings = Pick<
   TicketSettings,
-  "business" | "orderTerms" | "orderFooter" | "paperWidth" | "showCustomerPhone"
+  "business" | "orderTerms" | "orderFooter" | "paperWidth" | "showCustomerPhone" | "showSignature"
 >;
 
 export function OrderTicket({
@@ -83,12 +82,11 @@ export function OrderTicket({
       <p>Accesorios: {order.accessories || "Ninguno"}</p>
       {order.deviceCondition && <p>Estado: {order.deviceCondition}</p>}
       <p className="mt-1">Falla: {order.reportedIssue}</p>
-      {!delivered && order.intakeLabel && <p>Ingreso: {order.intakeLabel}</p>}
 
       {!delivered && order.parts.length > 0 && (
         <>
           <TicketDivider />
-          <p className="font-bold">Refacción</p>
+          <p className="font-bold">Refacciones</p>
           <ul className="space-y-1.5">
             {order.parts.map((part) => (
               <li key={part.id}>
@@ -101,21 +99,6 @@ export function OrderTicket({
             ))}
           </ul>
           {order.partsTotal && order.parts.length > 1 && <TicketRow label="Total refacciones" value={order.partsTotal} />}
-        </>
-      )}
-
-      {!delivered && order.parts.length === 0 && order.partsToGet.length > 0 && (
-        <>
-          <TicketDivider />
-          <p>Refacciones por conseguir:</p>
-          <ul>
-            {order.partsToGet.map((part) => (
-              <li key={part.id} className="flex justify-between gap-3">
-                <span>{part.description}</span>
-                <span className="tabular-nums">x{part.quantity}</span>
-              </li>
-            ))}
-          </ul>
         </>
       )}
 
@@ -177,7 +160,7 @@ export function OrderTicket({
             </>
           )}
           <p className="text-center">Presente este comprobante para recoger su equipo.</p>
-          <div className="mt-8 border-t border-black pt-1 text-center">Firma del cliente</div>
+          {settings.showSignature && <div className="mt-8 border-t border-black pt-1 text-center">Firma del cliente</div>}
         </>
       )}
 
@@ -188,7 +171,7 @@ export function OrderTicket({
             // SVG generado en el servidor con la librería qrcode a partir de nuestra propia URL.
             dangerouslySetInnerHTML={{ __html: qrSvg }}
           />
-          <p>Escanea para ver el avance de tu equipo</p>
+          <p>{delivered ? "Aquí tienes el historial de tu equipo" : "Escanea para ver el avance de tu equipo"}</p>
         </div>
       )}
 

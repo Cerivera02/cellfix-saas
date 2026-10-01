@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { toString as qrToString } from "qrcode";
 import { TicketSettingsForm, type TicketPreviewSamples } from "@/components/settings/ticket-settings-form";
+import { shortCustomerName } from "@/components/tickets/device-label";
 import { requireTenantPermission } from "@/lib/auth/session";
 import { dateTimeFormatter } from "@/lib/cash/format";
 import { addDays, formatDay, todayInMexico } from "@/lib/dates";
@@ -41,7 +42,6 @@ function buildSamples(): TicketPreviewSamples {
     intake: {
       ...base,
       delivered: false,
-      intakeLabel: "Refacción por conseguir",
       parts: [],
       partsTotal: null,
       partsToGet: [
@@ -60,7 +60,6 @@ function buildSamples(): TicketPreviewSamples {
     delivered: {
       ...base,
       delivered: true,
-      intakeLabel: "Refacción por conseguir",
       parts: [],
       partsTotal: null,
       partsToGet: [],
@@ -76,6 +75,13 @@ function buildSamples(): TicketPreviewSamples {
       balance: null,
       outcomeLabel: "Reparado",
       warrantyText: `Garantía: 90 días, hasta el ${dayDateFormatter.format(addDays(now, 90))}.`,
+    },
+    label: {
+      folio: base.folio,
+      device: base.device,
+      color: base.color,
+      customerName: shortCustomerName(base.customerName),
+      dateLabel: dayDateFormatter.format(now),
     },
     sale: {
       folio: 587,
