@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { FormMessage } from "@/components/admin/form-message";
+import { DeviceLabel, type DeviceLabelData } from "@/components/tickets/device-label";
 import { OrderTicket, type OrderTicketData } from "@/components/tickets/order-ticket";
 import { TicketHeader } from "@/components/tickets/ticket-header";
 import { TicketDivider, TicketPaper, TicketRow } from "@/components/tickets/ticket-paper";
@@ -22,6 +23,7 @@ import {
 export type TicketPreviewSamples = {
   intake: OrderTicketData;
   delivered: OrderTicketData;
+  label: DeviceLabelData;
   sale: {
     folio: number;
     dateLabel: string;
@@ -37,6 +39,7 @@ type TextKey = keyof typeof TICKET_LIMITS;
 type Values = Record<TextKey, string> & {
   paperWidth: PaperWidth;
   showCustomerPhone: boolean;
+  showSignature: boolean;
   showTrackingQr: boolean;
 };
 
@@ -44,6 +47,7 @@ const PREVIEWS = [
   { key: "intake", label: "Recepción" },
   { key: "delivered", label: "Entrega" },
   { key: "sale", label: "Venta" },
+  { key: "label", label: "Etiqueta" },
 ] as const;
 
 type PreviewKey = (typeof PREVIEWS)[number]["key"];
@@ -78,6 +82,7 @@ export function TicketSettingsForm({
     saleFooter: settings.saleFooter,
     paperWidth: settings.paperWidth,
     showCustomerPhone: settings.showCustomerPhone,
+    showSignature: settings.showSignature,
     showTrackingQr: settings.showTrackingQr,
   });
 
@@ -96,6 +101,7 @@ export function TicketSettingsForm({
     orderFooter: values.orderFooter.trim(),
     paperWidth: values.paperWidth,
     showCustomerPhone: values.showCustomerPhone,
+    showSignature: values.showSignature,
   };
   const qr = trackingEnabled && values.showTrackingQr ? sampleQr : null;
 
@@ -148,7 +154,7 @@ export function TicketSettingsForm({
             label="Condiciones de servicio"
             name="ticket-orderTerms"
             error={errors?.orderTerms}
-            hint="Se imprimen en el comprobante de recepción, antes de la firma del cliente."
+            hint="Se imprimen en el comprobante de recepción."
           >
             <textarea
               id="ticket-orderTerms"
@@ -190,6 +196,19 @@ export function TicketSettingsForm({
             />
             <span>Imprimir el teléfono del cliente</span>
           </label>
+          <label className="flex items-start gap-2.5 text-sm text-zinc-700">
+            <input
+              type="checkbox"
+              name="showSignature"
+              checked={values.showSignature}
+              onChange={(event) => set("showSignature", event.target.checked)}
+              className="mt-0.5 size-4 accent-zinc-900"
+            />
+            <span>
+              Imprimir línea de firma del cliente
+              <span className="block text-xs text-zinc-500">Útil si el taller pide firma al recibir el equipo.</span>
+            </span>
+          </label>
           {trackingEnabled ? (
             <label className="flex items-start gap-2.5 text-sm text-zinc-700">
               <input
@@ -222,7 +241,7 @@ export function TicketSettingsForm({
       </form>
 
       <aside className="flex flex-col gap-3 lg:sticky lg:top-6 lg:w-[88mm]" aria-label="Vista previa del ticket">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm font-medium text-zinc-700">Vista previa</p>
           <div className="flex rounded-lg bg-zinc-100 p-0.5 text-xs">
             {PREVIEWS.map((option) => (
@@ -266,6 +285,8 @@ export function TicketSettingsForm({
             <TicketDivider />
             <p className="text-center whitespace-pre-line">{values.saleFooter.trim() || DEFAULT_SALE_FOOTER}</p>
           </TicketPaper>
+        ) : preview === "label" ? (
+          <DeviceLabel label={samples.label} width={values.paperWidth} />
         ) : (
           <OrderTicket order={samples[preview]} settings={previewSettings} qrSvg={qr} />
         )}

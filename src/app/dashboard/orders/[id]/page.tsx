@@ -148,11 +148,19 @@ export default async function OrderPage(props: PageProps<"/dashboard/orders/[id]
       {searchParams.nueva === "1" && (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4">
           <p className="font-medium text-emerald-900">Orden #{order.folio} registrada</p>
-          {canSeePrices && (
-            <Link href={`/dashboard/orders/${order.id}/receipt`} className={primaryButtonClass}>
-              Imprimir comprobante
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href={`/dashboard/orders/${order.id}/label`}
+              className={canSeePrices ? secondaryButtonClass : primaryButtonClass}
+            >
+              Imprimir etiqueta
             </Link>
-          )}
+            {canSeePrices && (
+              <Link href={`/dashboard/orders/${order.id}/receipt`} className={primaryButtonClass}>
+                Imprimir comprobante
+              </Link>
+            )}
+          </div>
         </div>
       )}
       {searchParams.entregada === "1" && order.status === "delivered" && canSeePrices && (
@@ -223,6 +231,10 @@ export default async function OrderPage(props: PageProps<"/dashboard/orders/[id]
               {order.status === "delivered" ? "Ticket" : "Comprobante"}
             </Link>
           )}
+          {/* La etiqueta no lleva importes: también la imprimen los técnicos. */}
+          <Link href={`/dashboard/orders/${order.id}/label`} className={secondaryButtonClass}>
+            Imprimir etiqueta
+          </Link>
           {canIntake && (
             <Link href={`/dashboard/orders/${order.id}/edit`} className={secondaryButtonClass}>
               Editar

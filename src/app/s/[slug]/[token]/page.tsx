@@ -203,7 +203,7 @@ export default async function TrackingPage(props: PageProps<"/s/[slug]/[token]">
             </div>
             {partsToGet.length > 0 && (
               <div>
-                <dt className="text-zinc-500">Refacciones por conseguir</dt>
+                <dt className="text-zinc-500">Refacciones</dt>
                 <dd className="mt-0.5 text-zinc-900">
                   <ul className="space-y-0.5">
                     {partsToGet.map((part, index) => (

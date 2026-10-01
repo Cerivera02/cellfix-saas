@@ -40,4 +40,6 @@ export type TicketSettings = {
   showTrackingQr: boolean;
   paperWidth: PaperWidth;
   showCustomerPhone: boolean;
+  // Línea de firma del cliente en el comprobante de recepción.
+  showSignature: boolean;
 };
