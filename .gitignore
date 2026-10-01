@@ -49,3 +49,6 @@ next-env.d.ts
 
 # Archivos temporales de Office (Excel/Word abiertos)
 ~$*
+
+# Notas locales (credenciales de prueba)
+docs/*.local.*
