@@ -33,12 +33,13 @@ export async function EvidenceShowcase() {
             Fotos del equipo antes de tocarlo
           </h2>
           <p className="mt-4 max-w-lg text-zinc-600">
-            Cuando un cliente dice «así no venía», la respuesta ya está en la orden.
+            Cuando un cliente dice <strong className="font-semibold text-zinc-900">&ldquo;así no venía&rdquo;</strong>, la
+            respuesta ya está en la orden.
           </p>
 
           <dl className="mt-10 space-y-6">
             {facts.map((fact) => (
-              <div key={fact.term} className="border-l-2 border-ink pl-4">
+              <div key={fact.term} className="border-l-2 border-mat pl-4">
                 <dt className="font-medium text-zinc-900">{fact.term}</dt>
                 <dd className="mt-1 text-sm leading-relaxed text-zinc-600">{fact.detail}</dd>
               </div>

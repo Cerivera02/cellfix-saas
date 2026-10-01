@@ -3,17 +3,23 @@
 import { useActionState, useState } from "react";
 import { signup } from "@/lib/auth/signup";
 import { NavIcon } from "@/components/shell/nav-icon";
-import { Field, buttonClass, inputClass } from "@/components/ui/form";
+import { PasswordStrength } from "@/components/auth/password-strength";
+import { Field, RequiredMark, buttonClass, inputClass } from "@/components/ui/form";
 import { PASSWORD_MIN_LENGTH } from "@/lib/validation";
 
 export function SignupForm() {
   const [state, formAction, pending] = useActionState(signup, undefined);
   const [showPassword, setShowPassword] = useState(false);
+  const [password, setPassword] = useState("");
   const errors = state?.errors;
 
   return (
-    <form action={formAction} className="flex flex-col gap-4" noValidate>
-      <Field label="Nombre de tu negocio" name="businessName" error={errors?.businessName}>
+    <form action={formAction} className="flex flex-col gap-3.5" noValidate>
+      <p className="text-xs text-zinc-500">
+        Los campos con <span className="text-red-600">*</span> son obligatorios.
+      </p>
+
+      <Field label="Nombre de tu negocio" name="businessName" error={errors?.businessName} required>
         <input
           id="businessName"
           name="businessName"
@@ -28,7 +34,7 @@ export function SignupForm() {
         />
       </Field>
 
-      <Field label="Tu nombre" name="name" error={errors?.name}>
+      <Field label="Tu nombre" name="name" error={errors?.name} required>
         <input
           id="name"
           name="name"
@@ -42,7 +48,7 @@ export function SignupForm() {
         />
       </Field>
 
-      <Field label="Correo" name="email" error={errors?.email}>
+      <Field label="Correo" name="email" error={errors?.email} required>
         <input
           id="email"
           name="email"
@@ -60,7 +66,8 @@ export function SignupForm() {
         label="Contraseña"
         name="password"
         error={errors?.password}
-        hint={`Al menos ${PASSWORD_MIN_LENGTH} caracteres.`}
+
+        required
       >
         <div className="relative">
           <input
@@ -70,6 +77,8 @@ export function SignupForm() {
             placeholder={`Mínimo ${PASSWORD_MIN_LENGTH} caracteres`}
             autoComplete="new-password"
             required
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
             className={`${inputClass} pr-12`}
           />
           <button
@@ -83,6 +92,7 @@ export function SignupForm() {
             <NavIcon name={showPassword ? "eyeOff" : "eye"} className="size-[1.1rem]" />
           </button>
         </div>
+        <PasswordStrength password={password} minLength={PASSWORD_MIN_LENGTH} />
       </Field>
 
       {/* Campo trampa para bots: fuera de la vista y del orden de tabulación. */}
@@ -94,7 +104,10 @@ export function SignupForm() {
       <div className="flex flex-col gap-1.5">
         <label className="flex cursor-pointer items-start gap-2.5 text-sm text-zinc-600">
           <input type="checkbox" name="terms" required className="mt-0.5 size-4 shrink-0 accent-zinc-900" />
-          <span>Acepto los términos del servicio y el aviso de privacidad de CellFix.</span>
+          <span>
+            Acepto los términos del servicio y el aviso de privacidad de CellFix.
+            <RequiredMark />
+          </span>
         </label>
         {errors?.terms && <p className="text-xs text-red-600">{errors.terms}</p>}
       </div>

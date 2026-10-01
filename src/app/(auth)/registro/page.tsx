@@ -23,11 +23,11 @@ export default async function SignupPage() {
       <h1 className="font-display text-4xl leading-none font-extrabold tracking-tight [font-stretch:118%]">
         Prueba CellFix gratis
       </h1>
-      <p className="mt-3 mb-9 text-zinc-600">
+      <p className="mt-3 mb-6 text-zinc-600">
         {trialDays} días con todos los módulos, sin tarjeta. Al terminar eliges qué quieres pagar.
       </p>
       <SignupForm />
-      <p className="mt-8 border-t border-zinc-200 pt-6 text-sm text-zinc-500">
+      <p className="mt-6 border-t border-zinc-200 pt-5 text-sm text-zinc-500">
         ¿Ya tienes cuenta?{" "}
         <Link href="/login" className="font-medium text-zinc-900 hover:underline">
           Inicia sesión
